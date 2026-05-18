@@ -35,24 +35,28 @@ const streamLabels = {
   product: "产品",
 };
 
+const NODE_W = 178;
+const NODE_H = 96;
+const LAYOUT_VERSION = 3;
+
 const defaultNodes = [
-  node("feed", "入洗原煤", 520, 30),
-  node("screen", "原煤筛分", 520, 150),
-  node("deslime", "末煤脱泥筛", 300, 280),
-  node("shallow", "块煤重介浅槽", 740, 280),
-  node("dmc", "末煤重介旋流器", 300, 420),
-  node("magnetite", "磁选机", 80, 570),
-  node("slimeCyclone", "煤泥分级旋流器", 300, 570),
-  node("spiral", "螺旋分选机", 300, 720),
-  node("thickener", "浓缩机", 80, 720),
-  node("filter", "压滤机", 80, 870),
-  node("centrifuge", "离心机", 740, 430),
-  node("belt", "精煤皮带", 740, 590),
-  node("bunker", "精煤筒仓", 740, 750),
-  node("product", "精煤产品", 740, 920),
-  node("reject", "矸石/尾煤", 500, 920),
-  node("mediumTank", "介质桶", 80, 1030),
-  node("water", "循环水池", 300, 1030),
+  node("feed", "入洗原煤", 350, 28),
+  node("screen", "原煤筛分", 350, 164),
+  node("deslime", "末煤脱泥筛", 240, 322),
+  node("shallow", "块煤重介浅槽", 560, 322),
+  node("dmc", "末煤重介旋流器", 240, 482),
+  node("magnetite", "磁选机", 40, 642),
+  node("slimeCyclone", "煤泥分级旋流器", 240, 642),
+  node("spiral", "螺旋分选机", 240, 802),
+  node("thickener", "浓缩机", 40, 802),
+  node("filter", "压滤机", 40, 972),
+  node("centrifuge", "离心机", 560, 502),
+  node("belt", "精煤皮带", 560, 682),
+  node("bunker", "精煤筒仓", 560, 852),
+  node("product", "精煤产品", 560, 1032),
+  node("reject", "矸石/尾煤", 390, 1032),
+  node("mediumTank", "介质桶", 40, 1132),
+  node("water", "循环水池", 240, 1132),
 ];
 
 const defaultLinks = [
@@ -187,8 +191,8 @@ function addNode(type, point) {
     id,
     type,
     name: equipmentTypes[type].label,
-    x: point ? clamp(point.x - bounds.left + canvas.scrollLeft - 77, 8, canvasW - 164) : 420 + Math.random() * 260,
-    y: point ? clamp(point.y - bounds.top + canvas.scrollTop - 35, 8, canvasH - 80) : 120 + Math.random() * 270,
+    x: point ? clamp(point.x - bounds.left + canvas.scrollLeft - NODE_W / 2, 8, canvasW - NODE_W - 8) : 420 + Math.random() * 260,
+    y: point ? clamp(point.y - bounds.top + canvas.scrollTop - NODE_H / 2, 8, canvasH - NODE_H - 8) : 120 + Math.random() * 270,
     params: { ...equipmentTypes[type].defaults },
   });
   selectedId = id;
@@ -221,7 +225,7 @@ function renderNodes() {
       <div class="node-title">${item.name}</div>
       <div class="node-meta">${equipmentTypes[item.type].category}<br>${r ? `${fmt(r.input)}→${fmt(r.output)} t/h · 灰分 ${fmt(r.ash, 1)}%` : "等待计算"}</div>
       <div class="output-ports">
-        ${ports.map((stream, index) => `<span class="port output output-${index}" data-port="output" data-stream="${stream}" title="${streamLabels[stream]}出口">${streamLabels[stream]}</span>`).join("")}
+        ${ports.map((stream, index) => `<span class="port output output-${index}" data-port="output" data-stream="${stream}" data-label="${streamLabels[stream]}" title="${streamLabels[stream]}出口"></span>`).join("")}
       </div>
     `;
     div.addEventListener("pointerdown", startDrag);
@@ -332,13 +336,13 @@ function markerName(stream) {
 function outputPoint(item, stream) {
   const outputs = equipmentTypes[item.type].outputs;
   const index = Math.max(0, outputs.indexOf(stream));
-  const slot = 154 / (outputs.length + 1);
-  const offset = outputs.length === 1 ? 77 : slot * (index + 1);
-  return { x: item.x + offset, y: item.y + 82 };
+  const slot = NODE_W / (outputs.length + 1);
+  const offset = outputs.length === 1 ? NODE_W / 2 : slot * (index + 1);
+  return { x: item.x + offset, y: item.y + NODE_H };
 }
 
 function inputPoint(item) {
-  return { x: item.x + 77, y: item.y };
+  return { x: item.x + NODE_W / 2, y: item.y };
 }
 
 function computeOverviewLayers(nodeList, linkList) {
@@ -765,8 +769,8 @@ function startDrag(event) {
   const move = (moveEvent) => {
     const canvasW = Math.max(canvas.scrollWidth, canvas.clientWidth);
     const canvasH = Math.max(canvas.scrollHeight, canvas.clientHeight);
-    item.x = clamp(originX + moveEvent.clientX - startX, 8, canvasW - 164);
-    item.y = clamp(originY + moveEvent.clientY - startY, 8, canvasH - 80);
+    item.x = clamp(originX + moveEvent.clientX - startX, 8, canvasW - NODE_W - 8);
+    item.y = clamp(originY + moveEvent.clientY - startY, 8, canvasH - NODE_H - 8);
     target.style.left = `${item.x}px`;
     target.style.top = `${item.y}px`;
     renderLinks();
@@ -1577,6 +1581,7 @@ function makeScenario(name) {
     name,
     savedAt: new Date().toISOString(),
     layoutDirection: "top-down",
+    layoutVersion: LAYOUT_VERSION,
     feed: getFeed(),
     coalQuality,
     nodes: nodes.map(cloneNode),
@@ -1750,6 +1755,7 @@ function normalizeImportedScenario(data) {
     nodes: nextNodes,
     links: nextLinks,
     layoutDirection: "top-down",
+    layoutVersion: LAYOUT_VERSION,
     selectedId: null,
   };
 }
@@ -2619,7 +2625,7 @@ function applyScenario(scenario) {
   setFeed(scenario.feed || { rate: 850, ash: 28.5, moisture: 9.5, fineRatio: 16 });
   coalQuality = scenario.coalQuality || null;
   nodes = (scenario.nodes || []).map(cloneNode);
-  if (scenario.layoutDirection !== "top-down") applyTopDownLayout(nodes);
+  if (scenario.layoutDirection !== "top-down" || scenario.layoutVersion !== LAYOUT_VERSION) applyTopDownLayout(nodes);
   links = (scenario.links || []).map((item) => ({ ...item }));
   selectedId = scenario.selectedId || null;
 }

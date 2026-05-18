@@ -516,8 +516,10 @@ select:focus {
   background:
     linear-gradient(rgba(15, 115, 183, 0.055) 1px, transparent 1px),
     linear-gradient(90deg, rgba(15, 115, 183, 0.055) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(245, 249, 252, 0.94)),
     #f8fafc;
-  background-size: 28px 28px;
+  background-size: 32px 32px, 32px 32px, auto, auto;
+  scrollbar-color: rgba(89, 103, 117, 0.6) transparent;
 }
 
 .links,
@@ -525,8 +527,8 @@ select:focus {
   position: absolute;
   left: 0;
   top: 0;
-  width: 1180px;
-  height: 1180px;
+  width: 820px;
+  height: 1280px;
 }
 
 .links {
@@ -536,15 +538,18 @@ select:focus {
 .flow-link {
   fill: none;
   stroke: #4f86b7;
-  stroke-width: 2.2;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.82;
 }
 
 .link-label {
   pointer-events: none;
   paint-order: stroke;
-  stroke: #fff;
-  stroke-width: 3px;
-  fill: #244052;
+  stroke: rgba(255, 255, 255, 0.94);
+  stroke-width: 6px;
+  fill: #23394a;
   font-size: 11px;
   font-weight: 700;
 }
@@ -738,14 +743,15 @@ select:focus {
 
 .node {
   position: absolute;
-  width: 154px;
-  min-height: 78px;
+  box-sizing: border-box;
+  width: 178px;
+  min-height: 96px;
   border: 2px solid transparent;
   border-radius: 8px;
-  padding: 10px;
+  padding: 14px 14px 12px;
   color: #fff;
-  background: var(--blue);
-  box-shadow: 0 10px 20px rgba(15, 115, 183, 0.2);
+  background: linear-gradient(180deg, #167db9, #0f73b7);
+  box-shadow: 0 12px 24px rgba(15, 115, 183, 0.16);
   cursor: grab;
   user-select: none;
 }
@@ -769,8 +775,8 @@ select:focus {
 .port {
   position: absolute;
   display: block;
-  width: 16px;
-  min-height: 16px;
+  width: 14px;
+  min-height: 14px;
   border: 2px solid #fff;
   border-radius: 50%;
   background: #ffcf55;
@@ -784,16 +790,37 @@ select:focus {
 }
 
 .port.output {
-  position: static;
-  width: auto;
-  min-width: 38px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 8px;
-  font-size: 10px;
-  line-height: 12px;
-  white-space: nowrap;
+  position: relative;
+  width: 12px;
+  min-width: 12px;
+  height: 12px;
+  padding: 0;
   cursor: crosshair;
+}
+
+.port.output::after {
+  content: attr(data-label);
+  position: absolute;
+  left: 50%;
+  top: 18px;
+  z-index: 5;
+  display: none;
+  transform: translateX(-50%);
+  border-radius: 7px;
+  padding: 2px 6px;
+  color: #244052;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 4px 12px rgba(23, 33, 43, 0.14);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.node:hover .port.output::after,
+.node.selected .port.output::after,
+.node.connecting .port.output::after {
+  display: block;
 }
 
 .port.input.ready {
@@ -803,10 +830,10 @@ select:focus {
 .output-ports {
   position: absolute;
   left: 50%;
-  bottom: -20px;
+  bottom: -14px;
   display: flex;
   flex-wrap: nowrap;
-  gap: 3px;
+  gap: 8px;
   justify-content: center;
   transform: translateX(-50%);
 }
