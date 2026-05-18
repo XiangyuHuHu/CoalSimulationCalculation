@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>选煤厂工艺模拟计算系统</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">选</div>
+          <div>
+            <h1>选煤厂工艺模拟</h1>
+            <p>拖拽流程 · 调参计算 · 产率预测</p>
+          </div>
+        </div>
+
+        <section class="panel">
+          <div class="panel-title">入洗原煤</div>
+          <div class="form-grid">
+            <label>
+              入洗量 t/h
+              <input id="feedRate" type="number" min="0" step="10" value="850" />
+            </label>
+            <label>
+              原煤灰分 %
+              <input id="feedAsh" type="number" min="0" max="80" step="0.1" value="28.5" />
+            </label>
+            <label>
+              全水分 %
+              <input id="feedMoisture" type="number" min="0" max="60" step="0.1" value="9.5" />
+            </label>
+            <label>
+              -0.25mm 含量 %
+              <input id="fineRatio" type="number" min="0" max="60" step="0.1" value="16" />
+            </label>
+          </div>
+          <button id="runBtn" class="primary-btn">重新计算</button>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">煤质数据</div>
+          <div id="coalQualityView" class="coal-quality-view empty-state">尚未导入煤质表；导入后这里会显示煤层、灰分、水分和粒级数据。</div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">设备库</div>
+          <div id="equipmentLibrary" class="library"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">测试方案</div>
+          <div class="scenario-tools">
+            <label>
+              当前方案
+              <select id="scenarioSelect"></select>
+            </label>
+            <button id="saveScenarioBtn" class="primary-btn" type="button">保存当前方案</button>
+            <button id="newScenarioBtn" class="ghost-dark-btn" type="button">新建测试</button>
+            <button id="demoScenarioBtn" class="ghost-dark-btn" type="button">生成测试样例</button>
+            <button id="downloadTemplateBtn" class="ghost-dark-btn" type="button">下载JSON模板</button>
+            <button id="downloadCsvTemplateBtn" class="ghost-dark-btn" type="button">下载CSV模板</button>
+            <button id="downloadExcelTemplateBtn" class="ghost-dark-btn" type="button">下载煤质模板</button>
+            <button id="importTemplateBtn" class="ghost-dark-btn" type="button">一键导入模板</button>
+            <input id="importTemplateFile" class="hidden-file" type="file" accept=".json,.csv,.xls,.xlsx,application/json,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+            <button id="deleteScenarioBtn" class="ghost-dark-btn danger" type="button">删除方案</button>
+          </div>
+        </section>
+
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <h2>选煤厂模拟流程</h2>
+            <p>按设备多出口和连线拓扑做质量平衡，产品仓与尾煤仓实时汇总</p>
+          </div>
+          <div class="toolbar">
+            <button id="resetBtn" class="ghost-btn">恢复默认流程</button>
+            <button id="topDownloadExcelTemplateBtn" class="ghost-btn">下载煤质模板</button>
+            <button id="topImportTemplateBtn" class="ghost-btn">一键导入模板</button>
+            <button id="exportBtn" class="ghost-btn">导出结果</button>
+          </div>
+        </header>
+
+        <section class="summary-grid">
+          <article>
+            <span>精煤产量</span>
+            <strong id="cleanCoal">0 t/h</strong>
+            <small id="cleanCoalRate">产率 0%</small>
+          </article>
+          <article>
+            <span>中煤产量</span>
+            <strong id="middlings">0 t/h</strong>
+            <small>重介再选综合回收</small>
+          </article>
+          <article>
+            <span>矸石/尾煤</span>
+            <strong id="rejects">0 t/h</strong>
+            <small>含压滤煤泥</small>
+          </article>
+          <article>
+            <span>精煤灰分</span>
+            <strong id="cleanAsh">0%</strong>
+            <small id="qualityHint">质量预测</small>
+          </article>
+          <article>
+            <span>水路/损失</span>
+            <strong id="waterLoss">0 t/h</strong>
+            <small id="balanceHint">平衡差 0 t/h</small>
+          </article>
+          <article>
+            <span>介质回收</span>
+            <strong id="mediumFlow">0 t/h</strong>
+            <small>磁选/介质系统</small>
+          </article>
+        </section>
+
+        <section class="process-card">
+          <div class="canvas-head">
+            <div>
+              <h3>流程画布</h3>
+              <p>从设备下方不同物料出口拖到另一个设备上方入口建立连线；选中设备可调整输出分配比例。</p>
+              <div id="coalQualityBadge" class="coal-quality-badge hidden"></div>
+            </div>
+            <div class="canvas-head-actions">
+              <button type="button" id="flowOverviewBtn" class="ghost-btn">查看流程总图</button>
+              <div class="legend">
+                <span><i class="dot input"></i>入料</span>
+                <span><i class="dot product"></i>产品</span>
+                <span><i class="dot recycle"></i>回收/水路</span>
+              </div>
+            </div>
+          </div>
+          <div id="coalQualityStrip" class="coal-quality-strip hidden"></div>
+          <div id="canvas" class="canvas">
+            <svg id="links" class="links" aria-hidden="true"></svg>
+            <div id="nodes" class="nodes"></div>
+          </div>
+        </section>
+
+      </main>
+
+      <aside class="rightbar">
+        <section class="panel inspector-panel">
+          <div class="panel-title">选中设备参数</div>
+          <div id="emptyInspector" class="empty-state">点击流程中的设备后，可调整密度、压力、筛分效率、加药量和输出连线比例。</div>
+          <div id="inspector" class="inspector hidden"></div>
+        </section>
+
+        <section class="table-card result-panel">
+          <div class="panel-title">设备计算结果</div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>设备</th>
+                  <th>入料</th>
+                  <th>出料</th>
+                  <th>灰分</th>
+                </tr>
+              </thead>
+              <tbody id="resultRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="table-card link-panel">
+          <div class="panel-title">物流计算结果</div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>物流</th>
+                  <th>流量</th>
+                  <th>灰分</th>
+                </tr>
+              </thead>
+              <tbody id="linkRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="table-card advice-panel">
+          <div class="panel-title">系统优化建议</div>
+          <ul id="adviceList" class="advice-list"></ul>
+        </section>
+      </aside>
+    </div>
+
+    <div id="contextMenu" class="context-menu hidden">
+      <button id="deleteNodeBtn" type="button">删除设备</button>
+    </div>
+
+    <div id="importProgress" class="import-progress hidden" aria-live="polite" aria-hidden="true">
+      <div class="import-progress-card">
+        <div class="import-progress-title">正在导入煤质数据</div>
+        <div id="importProgressText" class="import-progress-text">准备读取文件...</div>
+        <div class="import-progress-bar">
+          <span id="importProgressBar"></span>
+        </div>
+      </div>
+    </div>
+
+    <div id="flowOverviewModal" class="flow-overview-modal hidden" aria-hidden="true">
+      <div class="flow-overview-backdrop" data-close-overview tabindex="-1"></div>
+      <div class="flow-overview-dialog" role="dialog" aria-modal="true" aria-labelledby="flowOverviewTitle">
+        <header class="flow-overview-header">
+          <div>
+            <h3 id="flowOverviewTitle">流程总图</h3>
+            <p class="flow-overview-sub">按工艺拓扑从上到下分层排列；箭头为物流方向，线段颜色与主画布一致。</p>
+          </div>
+          <button type="button" id="flowOverviewClose" class="ghost-btn">关闭</button>
+        </header>
+        <div class="flow-overview-legend" id="flowOverviewLegend">
+          <span><i class="ov-sw ov-green"></i>精煤/产品</span>
+          <span><i class="ov-sw ov-gray"></i>矸石/中煤/滤饼</span>
+          <span><i class="ov-sw ov-orange"></i>煤泥/分级</span>
+          <span><i class="ov-sw ov-teal"></i>水路/介质</span>
+          <span><i class="ov-sw ov-blue"></i>原煤及其他</span>
+        </div>
+        <p id="flowOverviewHint" class="flow-overview-hint hidden"></p>
+        <div class="flow-overview-scroll">
+          <p id="flowOverviewEmpty" class="flow-overview-empty hidden">画布上还没有设备，请先从左侧拖入设备并连线。</p>
+          <svg id="flowOverviewSvg" xmlns="http://www.w3.org/2000/svg" class="flow-overview-svg"></svg>
+        </div>
+      </div>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

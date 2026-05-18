@@ -1,0 +1,7 @@
+source_full_scan.xlsx
+full_scan_report.json
+topdown-flow-check.png
+
+*.log
+.DS_Store
+Thumbs.db
