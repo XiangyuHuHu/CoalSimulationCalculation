@@ -253,11 +253,23 @@ function renderLinks() {
   linkLayer.setAttribute("width", String(width));
   linkLayer.setAttribute("height", String(height));
   linkLayer.innerHTML = "";
-  links.forEach((item, index) => {
+  const lanes = computeLinkLanes(links);
+  const sorted = links
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const fa = nodes.find((n) => n.id === a.item.from);
+      const fb = nodes.find((n) => n.id === b.item.from);
+      const ta = nodes.find((n) => n.id === a.item.to);
+      const tb = nodes.find((n) => n.id === b.item.to);
+      const lenA = fa && ta ? Math.hypot(ta.x - fa.x, ta.y - fa.y) : 0;
+      const lenB = fb && tb ? Math.hypot(tb.x - fb.x, tb.y - fb.y) : 0;
+      return lenB - lenA;
+    });
+  sorted.forEach(({ item, index }) => {
     const from = nodes.find((nodeItem) => nodeItem.id === item.from);
     const to = nodes.find((nodeItem) => nodeItem.id === item.to);
     if (!from || !to) return;
-    drawLink(from, to, item.stream, false, linkResults[index]);
+    drawLink(from, to, item.stream, false, linkResults[index], lanes[index]);
   });
   if (linkSource && previewPoint) {
     const from = nodes.find((item) => item.id === linkSource.id);
@@ -265,36 +277,144 @@ function renderLinks() {
   }
 }
 
-function drawLink(from, to, stream, preview, result) {
+function computeLinkLanes(linkList) {
+  const pairIndex = {};
+  const fromStreamIndex = {};
+  return linkList.map((link) => {
+    const key = `${link.from}|${link.to}`;
+    const idx = pairIndex[key] || 0;
+    pairIndex[key] = idx + 1;
+    const pairLane = idx === 0 ? 0 : (idx % 2 === 1 ? 1 : -1) * 16 * Math.ceil(idx / 2);
+
+    const streamKey = `${link.from}|${link.stream}`;
+    const streamIdx = fromStreamIndex[streamKey] || 0;
+    fromStreamIndex[streamKey] = streamIdx + 1;
+    const streamLane = streamIdx * 6;
+
+    return pairLane + streamLane;
+  });
+}
+
+function buildOrthogonalRoute(start, end, lane = 0) {
+  const stub = 26;
+  const dy = end.y - start.y;
+  let midY;
+  if (Math.abs(dy) <= stub * 2) {
+    midY = start.y + (dy >= 0 ? stub : -stub) + lane;
+  } else if (dy > stub) {
+    midY = start.y + stub + lane + 6;
+  } else {
+    midY = end.y + stub + lane + 6;
+  }
+  return [
+    { x: start.x, y: start.y },
+    { x: start.x, y: midY },
+    { x: end.x, y: midY },
+    { x: end.x, y: end.y },
+  ];
+}
+
+function buildRoundedOrthogonalPath(points, radius = 14) {
+  if (!points.length) return "";
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+  let d = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    if (i < points.length - 1) {
+      const next = points[i + 1];
+      const v1x = curr.x - prev.x;
+      const v1y = curr.y - prev.y;
+      const v2x = next.x - curr.x;
+      const v2y = next.y - curr.y;
+      const len1 = Math.hypot(v1x, v1y) || 1;
+      const len2 = Math.hypot(v2x, v2y) || 1;
+      const rr = Math.min(radius, len1 / 2, len2 / 2);
+      const p1x = curr.x - (v1x / len1) * rr;
+      const p1y = curr.y - (v1y / len1) * rr;
+      const p2x = curr.x + (v2x / len2) * rr;
+      const p2y = curr.y + (v2y / len2) * rr;
+      d += ` L ${p1x} ${p1y} Q ${curr.x} ${curr.y} ${p2x} ${p2y}`;
+    } else {
+      d += ` L ${curr.x} ${curr.y}`;
+    }
+  }
+  return d;
+}
+
+function linkLabelAnchor(points) {
+  let best = null;
+  let bestLen = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    if (Math.abs(a.y - b.y) < 0.5) {
+      const len = Math.abs(a.x - b.x);
+      if (len > bestLen) {
+        bestLen = len;
+        best = { x: (a.x + b.x) / 2, y: a.y - 9 };
+      }
+    }
+  }
+  if (best) return best;
+  const first = points[0];
+  const last = points[points.length - 1];
+  return { x: (first.x + last.x) / 2, y: (first.y + last.y) / 2 - 9 };
+}
+
+function appendLinkLabel(text, anchor, stream) {
+  const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+  label.setAttribute("class", "link-label");
+  label.setAttribute("x", `${anchor.x}`);
+  label.setAttribute("y", `${anchor.y}`);
+  label.setAttribute("text-anchor", "middle");
+  label.textContent = text;
+  linkLayer.appendChild(label);
+  const box = label.getBBox();
+  const padX = 5;
+  const padY = 3;
+  const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  bg.setAttribute("class", `link-label-bg stream-${stream}`);
+  bg.setAttribute("x", String(box.x - padX));
+  bg.setAttribute("y", String(box.y - padY));
+  bg.setAttribute("width", String(box.width + padX * 2));
+  bg.setAttribute("height", String(box.height + padY * 2));
+  bg.setAttribute("rx", "4");
+  linkLayer.insertBefore(bg, label);
+}
+
+function routeWithArrow(points) {
+  if (points.length < 2) return { drawPoints: points, tip: points[0], arrowFrom: points[0] };
+  const end = points[points.length - 1];
+  const prev = points[points.length - 2];
+  const tip = shortenArrowTip(prev, end, 11);
+  return { drawPoints: [...points.slice(0, -1), tip], tip, arrowFrom: prev };
+}
+
+function drawLink(from, to, stream, preview, result, lane = 0) {
   const start = outputPoint(from, stream);
   const end = inputPoint(to);
-  const tip = shortenArrowTip(start, end, 11);
-  const dy = Math.max(42, Math.min(130, Math.abs(tip.y - start.y) * 0.45));
-  const c1 = { x: start.x, y: start.y + dy };
-  const c2 = { x: tip.x, y: tip.y - dy };
+  const route = buildOrthogonalRoute(start, end, lane);
+  const { drawPoints, tip, arrowFrom } = routeWithArrow(route);
   const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
   path.setAttribute("class", `flow-link stream-${stream} ${preview ? "preview" : ""}`);
-  path.setAttribute("d", `M ${start.x} ${start.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${tip.x} ${tip.y}`);
+  path.setAttribute("d", buildRoundedOrthogonalPath(drawPoints, 12));
   linkLayer.appendChild(path);
-  drawArrowHead(bezierPoint(start, c1, c2, tip, 0.965), tip, stream);
+  drawArrowHead(arrowFrom, tip, stream);
   if (result && result.mass > 0) {
-    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    text.setAttribute("class", "link-label");
-    text.setAttribute("x", `${(start.x + end.x) / 2}`);
-    text.setAttribute("y", `${(start.y + end.y) / 2 - 4}`);
-    text.setAttribute("text-anchor", "middle");
-    text.textContent = `${streamLabels[stream]} ${fmt(result.mass)}t/h`;
-    linkLayer.appendChild(text);
+    appendLinkLabel(`${streamLabels[stream]} ${fmt(result.mass)}t/h`, linkLabelAnchor(route), stream);
   }
 }
 
 function drawPreviewLink(from, stream, point) {
   const start = outputPoint(from, stream);
+  const route = buildOrthogonalRoute(start, point, 0);
+  const { drawPoints, tip, arrowFrom } = routeWithArrow(route);
   const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
   path.setAttribute("class", "flow-link preview");
-  path.setAttribute("d", `M ${start.x} ${start.y} L ${point.x} ${point.y}`);
+  path.setAttribute("d", buildRoundedOrthogonalPath(drawPoints, 10));
   linkLayer.appendChild(path);
-  drawArrowHead(start, point, "default");
+  drawArrowHead(arrowFrom, tip, "default");
 }
 
 function shortenArrowTip(start, end, distance) {
@@ -302,14 +422,6 @@ function shortenArrowTip(start, end, distance) {
   const dy = end.y - start.y;
   const len = Math.hypot(dx, dy) || 1;
   return { x: end.x - (dx / len) * distance, y: end.y - (dy / len) * distance };
-}
-
-function bezierPoint(p0, p1, p2, p3, t) {
-  const mt = 1 - t;
-  return {
-    x: mt ** 3 * p0.x + 3 * mt ** 2 * t * p1.x + 3 * mt * t ** 2 * p2.x + t ** 3 * p3.x,
-    y: mt ** 3 * p0.y + 3 * mt ** 2 * t * p1.y + 3 * mt * t ** 2 * p2.y + t ** 3 * p3.y,
-  };
 }
 
 function drawArrowHead(from, tip, stream) {
@@ -678,20 +790,19 @@ function renderFlowOverview() {
     const idx = pairIndex[pairKey] || 0;
     pairIndex[pairKey] = idx + 1;
     const bump = idx === 0 ? 0 : (idx % 2 === 1 ? 1 : -1) * spread * Math.ceil(idx / 2);
-    const x1 = overviewPortX(pf, fromNode, l.stream) + bump;
-    const y1 = pf.y + pf.h;
-    const x2 = pt.x + pt.w / 2 + bump;
-    const y2 = pt.y;
-    const delta = Math.max(40, Math.min(115, Math.abs(y2 - y1) * 0.45));
+    const start = { x: overviewPortX(pf, fromNode, l.stream), y: pf.y + pf.h };
+    const end = { x: pt.x + pt.w / 2, y: pt.y };
+    const route = buildOrthogonalRoute(start, end, bump);
     const path = createSvgEl("path", {
-      d: `M ${x1} ${y1} C ${x1} ${y1 + delta}, ${x2} ${y2 - delta}, ${x2} ${y2}`,
+      d: buildRoundedOrthogonalPath(route, 10),
       class: `flow-link flow-overview-flow stream-${l.stream}`,
       "marker-end": `url(#ov-arrow-${markerName(l.stream)})`,
     });
     edgeGroup.appendChild(path);
+    const labelPos = linkLabelAnchor(route);
     edgeLabels.push({
-      x: (x1 + x2) / 2,
-      y: (y1 + y2) / 2 - 5,
+      x: labelPos.x,
+      y: labelPos.y,
       text: streamLabels[l.stream] || l.stream,
     });
   });

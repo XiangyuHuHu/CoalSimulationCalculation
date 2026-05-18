@@ -538,26 +538,30 @@ select:focus {
 .flow-link {
   fill: none;
   stroke: #4f86b7;
-  stroke-width: 2.6;
+  stroke-width: 2.2;
   stroke-linecap: round;
   stroke-linejoin: round;
-  opacity: 0.82;
+  opacity: 0.88;
 }
 
 .flow-arrow {
   fill: #4f86b7;
-  opacity: 0.9;
-  filter: drop-shadow(0 1px 1px rgba(23, 33, 43, 0.18));
+  opacity: 0.92;
+}
+
+.link-label-bg {
+  fill: rgba(255, 255, 255, 0.94);
+  stroke: rgba(217, 226, 234, 0.95);
+  stroke-width: 1;
+  pointer-events: none;
 }
 
 .link-label {
   pointer-events: none;
-  paint-order: stroke;
-  stroke: rgba(255, 255, 255, 0.94);
-  stroke-width: 6px;
-  fill: #23394a;
-  font-size: 11px;
+  fill: #2a4254;
+  font-size: 10.5px;
   font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .flow-link.preview {
@@ -567,10 +571,10 @@ select:focus {
 
 .flow-overview-flow {
   fill: none;
-  stroke-width: 2.2;
+  stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
-  opacity: 0.82;
+  opacity: 0.9;
 }
 
 .flow-overview-modal {
