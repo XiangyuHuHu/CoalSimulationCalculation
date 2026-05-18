@@ -544,6 +544,12 @@ select:focus {
   opacity: 0.82;
 }
 
+.flow-arrow {
+  fill: #4f86b7;
+  opacity: 0.9;
+  filter: drop-shadow(0 1px 1px rgba(23, 33, 43, 0.18));
+}
+
 .link-label {
   pointer-events: none;
   paint-order: stroke;
@@ -866,10 +872,21 @@ select:focus {
   stroke: var(--green);
 }
 
+.flow-arrow.stream-clean,
+.flow-arrow.stream-product {
+  fill: var(--green);
+}
+
 .stream-reject,
 .stream-middling,
 .stream-cake {
   stroke: #6f7782;
+}
+
+.flow-arrow.stream-reject,
+.flow-arrow.stream-middling,
+.flow-arrow.stream-cake {
+  fill: #6f7782;
 }
 
 .stream-slime,
@@ -879,9 +896,21 @@ select:focus {
   stroke: var(--orange);
 }
 
+.flow-arrow.stream-slime,
+.flow-arrow.stream-coarseSlime,
+.flow-arrow.stream-fineSlime,
+.flow-arrow.stream-underflow {
+  fill: var(--orange);
+}
+
 .stream-water,
 .stream-medium {
   stroke: #16a3a7;
+}
+
+.flow-arrow.stream-water,
+.flow-arrow.stream-medium {
+  fill: #16a3a7;
 }
 
 .node.product {

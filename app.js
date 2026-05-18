@@ -253,7 +253,6 @@ function renderLinks() {
   linkLayer.setAttribute("width", String(width));
   linkLayer.setAttribute("height", String(height));
   linkLayer.innerHTML = "";
-  renderArrowMarkers();
   links.forEach((item, index) => {
     const from = nodes.find((nodeItem) => nodeItem.id === item.from);
     const to = nodes.find((nodeItem) => nodeItem.id === item.to);
@@ -266,49 +265,18 @@ function renderLinks() {
   }
 }
 
-function renderArrowMarkers() {
-  const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
-  const colors = {
-    default: "#4f86b7",
-    clean: "#2c9b68",
-    product: "#2c9b68",
-    reject: "#6f7782",
-    middling: "#6f7782",
-    cake: "#6f7782",
-    slime: "#d27b25",
-    coarseSlime: "#d27b25",
-    fineSlime: "#d27b25",
-    underflow: "#d27b25",
-    water: "#16a3a7",
-    medium: "#16a3a7",
-  };
-  Object.entries(colors).forEach(([name, color]) => {
-    const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
-    marker.setAttribute("id", `arrow-${name}`);
-    marker.setAttribute("markerWidth", "10");
-    marker.setAttribute("markerHeight", "10");
-    marker.setAttribute("refX", "9");
-    marker.setAttribute("refY", "3");
-    marker.setAttribute("orient", "auto");
-    marker.setAttribute("markerUnits", "strokeWidth");
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", "M0,0 L9,3 L0,6 Z");
-    path.setAttribute("fill", color);
-    marker.appendChild(path);
-    defs.appendChild(marker);
-  });
-  linkLayer.appendChild(defs);
-}
-
 function drawLink(from, to, stream, preview, result) {
   const start = outputPoint(from, stream);
   const end = inputPoint(to);
+  const tip = shortenArrowTip(start, end, 11);
+  const dy = Math.max(42, Math.min(130, Math.abs(tip.y - start.y) * 0.45));
+  const c1 = { x: start.x, y: start.y + dy };
+  const c2 = { x: tip.x, y: tip.y - dy };
   const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
   path.setAttribute("class", `flow-link stream-${stream} ${preview ? "preview" : ""}`);
-  const dy = Math.max(42, Math.min(130, Math.abs(end.y - start.y) * 0.45));
-  path.setAttribute("d", `M ${start.x} ${start.y} C ${start.x} ${start.y + dy}, ${end.x} ${end.y - dy}, ${end.x} ${end.y}`);
-  path.setAttribute("marker-end", `url(#arrow-${markerName(stream)})`);
+  path.setAttribute("d", `M ${start.x} ${start.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${tip.x} ${tip.y}`);
   linkLayer.appendChild(path);
+  drawArrowHead(bezierPoint(start, c1, c2, tip, 0.965), tip, stream);
   if (result && result.mass > 0) {
     const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
     text.setAttribute("class", "link-label");
@@ -325,8 +293,40 @@ function drawPreviewLink(from, stream, point) {
   const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
   path.setAttribute("class", "flow-link preview");
   path.setAttribute("d", `M ${start.x} ${start.y} L ${point.x} ${point.y}`);
-  path.setAttribute("marker-end", "url(#arrow-default)");
   linkLayer.appendChild(path);
+  drawArrowHead(start, point, "default");
+}
+
+function shortenArrowTip(start, end, distance) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const len = Math.hypot(dx, dy) || 1;
+  return { x: end.x - (dx / len) * distance, y: end.y - (dy / len) * distance };
+}
+
+function bezierPoint(p0, p1, p2, p3, t) {
+  const mt = 1 - t;
+  return {
+    x: mt ** 3 * p0.x + 3 * mt ** 2 * t * p1.x + 3 * mt * t ** 2 * p2.x + t ** 3 * p3.x,
+    y: mt ** 3 * p0.y + 3 * mt ** 2 * t * p1.y + 3 * mt * t ** 2 * p2.y + t ** 3 * p3.y,
+  };
+}
+
+function drawArrowHead(from, tip, stream) {
+  const dx = tip.x - from.x;
+  const dy = tip.y - from.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const size = 13;
+  const half = 5.5;
+  const base = { x: tip.x - ux * size, y: tip.y - uy * size };
+  const left = { x: base.x - uy * half, y: base.y + ux * half };
+  const right = { x: base.x + uy * half, y: base.y - ux * half };
+  const head = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+  head.setAttribute("class", `flow-arrow stream-${stream}`);
+  head.setAttribute("points", `${tip.x},${tip.y} ${left.x},${left.y} ${right.x},${right.y}`);
+  linkLayer.appendChild(head);
 }
 
 function markerName(stream) {
