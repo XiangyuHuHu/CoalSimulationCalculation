@@ -507,6 +507,7 @@ select:focus {
 }
 
 .canvas {
+  --link-scale: 1;
   position: relative;
   height: calc(100vh - 188px);
   min-height: 540px;
@@ -527,8 +528,8 @@ select:focus {
   position: absolute;
   left: 0;
   top: 0;
-  width: 820px;
-  height: 1280px;
+  min-width: 100%;
+  min-height: 100%;
 }
 
 .links {
@@ -538,7 +539,7 @@ select:focus {
 .flow-link {
   fill: none;
   stroke: #4f86b7;
-  stroke-width: 2.2;
+  stroke-width: calc(2.2px * var(--link-scale, 1));
   stroke-linecap: round;
   stroke-linejoin: round;
   opacity: 0.88;

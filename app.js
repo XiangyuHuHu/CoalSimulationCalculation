@@ -37,7 +37,11 @@ const streamLabels = {
 
 const NODE_W = 178;
 const NODE_H = 96;
+const DESIGN_CANVAS_W = 820;
+const DESIGN_CANVAS_H = 1280;
 const LAYOUT_VERSION = 3;
+
+let currentLinkScale = 1;
 
 const defaultNodes = [
   node("feed", "入洗原煤", 350, 28),
@@ -202,6 +206,7 @@ function addNode(type, point) {
 
 function renderAll() {
   calculate();
+  syncCanvasDimensions();
   renderNodes();
   renderLinks();
   renderInspector();
@@ -246,7 +251,50 @@ function renderNodes() {
   nodeLayer.querySelectorAll(".port.input").forEach((port) => port.addEventListener("pointerup", finishLink));
 }
 
+function getNodesContentSize() {
+  if (!nodes.length) return { width: DESIGN_CANVAS_W, height: DESIGN_CANVAS_H };
+  let maxX = NODE_W + 56;
+  let maxY = NODE_H + 56;
+  nodes.forEach((n) => {
+    maxX = Math.max(maxX, n.x + NODE_W + 56);
+    maxY = Math.max(maxY, n.y + NODE_H + 56);
+  });
+  return { width: maxX, height: maxY };
+}
+
+function syncCanvasDimensions() {
+  const content = getNodesContentSize();
+  const width = Math.max(content.width, canvas.clientWidth || 0, DESIGN_CANVAS_W);
+  const height = Math.max(content.height, canvas.clientHeight || 0, 540);
+  const w = `${width}px`;
+  const h = `${height}px`;
+  nodeLayer.style.width = w;
+  nodeLayer.style.height = h;
+  linkLayer.style.width = w;
+  linkLayer.style.height = h;
+}
+
+function getLinkScale() {
+  const viewW = Math.max(canvas.clientWidth || DESIGN_CANVAS_W, 320);
+  const viewH = Math.max(canvas.clientHeight || 540, 320);
+  const content = getNodesContentSize();
+  const scaleX = viewW / DESIGN_CANVAS_W;
+  const scaleY = viewH / DESIGN_CANVAS_H;
+  const contentX = content.width / DESIGN_CANVAS_W;
+  const contentY = content.height / DESIGN_CANVAS_H;
+  const scale = Math.min(scaleX, scaleY, Math.max(contentX, 0.85), Math.max(contentY, 0.85));
+  return clamp(scale, 0.72, 1.45);
+}
+
+function applyLinkScaleVars() {
+  currentLinkScale = getLinkScale();
+  canvas.style.setProperty("--link-scale", currentLinkScale.toFixed(3));
+  return currentLinkScale;
+}
+
 function renderLinks() {
+  syncCanvasDimensions();
+  const scale = applyLinkScaleVars();
   const width = Math.max(canvas.scrollWidth, nodeLayer.scrollWidth, canvas.clientWidth);
   const height = Math.max(canvas.scrollHeight, nodeLayer.scrollHeight, canvas.clientHeight);
   linkLayer.setAttribute("viewBox", `0 0 ${width} ${height}`);
@@ -269,11 +317,11 @@ function renderLinks() {
     const from = nodes.find((nodeItem) => nodeItem.id === item.from);
     const to = nodes.find((nodeItem) => nodeItem.id === item.to);
     if (!from || !to) return;
-    drawLink(from, to, item.stream, false, linkResults[index], lanes[index]);
+    drawLink(from, to, item.stream, false, linkResults[index], lanes[index], scale);
   });
   if (linkSource && previewPoint) {
     const from = nodes.find((item) => item.id === linkSource.id);
-    if (from) drawPreviewLink(from, linkSource.stream, previewPoint);
+    if (from) drawPreviewLink(from, linkSource.stream, previewPoint, scale);
   }
 }
 
@@ -295,16 +343,17 @@ function computeLinkLanes(linkList) {
   });
 }
 
-function buildOrthogonalRoute(start, end, lane = 0) {
-  const stub = 26;
+function buildOrthogonalRoute(start, end, lane = 0, scale = 1) {
+  const stub = 26 * scale;
+  const bump = 6 * scale;
   const dy = end.y - start.y;
   let midY;
   if (Math.abs(dy) <= stub * 2) {
     midY = start.y + (dy >= 0 ? stub : -stub) + lane;
   } else if (dy > stub) {
-    midY = start.y + stub + lane + 6;
+    midY = start.y + stub + lane + bump;
   } else {
-    midY = end.y + stub + lane + 6;
+    midY = end.y + stub + lane + bump;
   }
   return [
     { x: start.x, y: start.y },
@@ -342,9 +391,10 @@ function buildRoundedOrthogonalPath(points, radius = 14) {
   return d;
 }
 
-function linkLabelAnchor(points) {
+function linkLabelAnchor(points, scale = 1) {
   let best = null;
   let bestLen = 0;
+  const labelLift = 9 * scale;
   for (let i = 1; i < points.length; i++) {
     const a = points[i - 1];
     const b = points[i];
@@ -352,69 +402,71 @@ function linkLabelAnchor(points) {
       const len = Math.abs(a.x - b.x);
       if (len > bestLen) {
         bestLen = len;
-        best = { x: (a.x + b.x) / 2, y: a.y - 9 };
+        best = { x: (a.x + b.x) / 2, y: a.y - labelLift };
       }
     }
   }
   if (best) return best;
   const first = points[0];
   const last = points[points.length - 1];
-  return { x: (first.x + last.x) / 2, y: (first.y + last.y) / 2 - 9 };
+  return { x: (first.x + last.x) / 2, y: (first.y + last.y) / 2 - labelLift };
 }
 
-function appendLinkLabel(text, anchor, stream) {
+function appendLinkLabel(text, anchor, stream, scale = 1) {
   const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
   label.setAttribute("class", "link-label");
   label.setAttribute("x", `${anchor.x}`);
   label.setAttribute("y", `${anchor.y}`);
   label.setAttribute("text-anchor", "middle");
+  label.setAttribute("font-size", `${10.5 * scale}`);
   label.textContent = text;
   linkLayer.appendChild(label);
   const box = label.getBBox();
-  const padX = 5;
-  const padY = 3;
+  const padX = 5 * scale;
+  const padY = 3 * scale;
   const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
   bg.setAttribute("class", `link-label-bg stream-${stream}`);
   bg.setAttribute("x", String(box.x - padX));
   bg.setAttribute("y", String(box.y - padY));
   bg.setAttribute("width", String(box.width + padX * 2));
   bg.setAttribute("height", String(box.height + padY * 2));
-  bg.setAttribute("rx", "4");
+  bg.setAttribute("rx", String(4 * scale));
   linkLayer.insertBefore(bg, label);
 }
 
-function routeWithArrow(points) {
+function routeWithArrow(points, scale = 1) {
   if (points.length < 2) return { drawPoints: points, tip: points[0], arrowFrom: points[0] };
   const end = points[points.length - 1];
   const prev = points[points.length - 2];
-  const tip = shortenArrowTip(prev, end, 11);
+  const tip = shortenArrowTip(prev, end, 11 * scale);
   return { drawPoints: [...points.slice(0, -1), tip], tip, arrowFrom: prev };
 }
 
-function drawLink(from, to, stream, preview, result, lane = 0) {
+function drawLink(from, to, stream, preview, result, lane = 0, scale = 1) {
   const start = outputPoint(from, stream);
   const end = inputPoint(to);
-  const route = buildOrthogonalRoute(start, end, lane);
-  const { drawPoints, tip, arrowFrom } = routeWithArrow(route);
+  const scaledLane = lane * scale;
+  const route = buildOrthogonalRoute(start, end, scaledLane, scale);
+  const { drawPoints, tip, arrowFrom } = routeWithArrow(route, scale);
   const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
   path.setAttribute("class", `flow-link stream-${stream} ${preview ? "preview" : ""}`);
-  path.setAttribute("d", buildRoundedOrthogonalPath(drawPoints, 12));
+  path.setAttribute("d", buildRoundedOrthogonalPath(drawPoints, 12 * scale));
   linkLayer.appendChild(path);
-  drawArrowHead(arrowFrom, tip, stream);
+  drawArrowHead(arrowFrom, tip, stream, scale);
   if (result && result.mass > 0) {
-    appendLinkLabel(`${streamLabels[stream]} ${fmt(result.mass)}t/h`, linkLabelAnchor(route), stream);
+    appendLinkLabel(`${streamLabels[stream]} ${fmt(result.mass)}t/h`, linkLabelAnchor(route, scale), stream, scale);
   }
 }
 
-function drawPreviewLink(from, stream, point) {
+function drawPreviewLink(from, stream, point, scale = 1) {
   const start = outputPoint(from, stream);
-  const route = buildOrthogonalRoute(start, point, 0);
-  const { drawPoints, tip, arrowFrom } = routeWithArrow(route);
+  const route = buildOrthogonalRoute(start, point, 0, scale);
+  const { drawPoints, tip, arrowFrom } = routeWithArrow(route, scale);
   const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
   path.setAttribute("class", "flow-link preview");
-  path.setAttribute("d", buildRoundedOrthogonalPath(drawPoints, 10));
+  path.setAttribute("d", buildRoundedOrthogonalPath(drawPoints, 10 * scale));
   linkLayer.appendChild(path);
-  drawArrowHead(arrowFrom, tip, "default");
+  drawArrowHead(arrowFrom, tip, "default", scale);
 }
 
 function shortenArrowTip(start, end, distance) {
@@ -424,14 +476,14 @@ function shortenArrowTip(start, end, distance) {
   return { x: end.x - (dx / len) * distance, y: end.y - (dy / len) * distance };
 }
 
-function drawArrowHead(from, tip, stream) {
+function drawArrowHead(from, tip, stream, scale = 1) {
   const dx = tip.x - from.x;
   const dy = tip.y - from.y;
   const len = Math.hypot(dx, dy) || 1;
   const ux = dx / len;
   const uy = dy / len;
-  const size = 13;
-  const half = 5.5;
+  const size = 13 * scale;
+  const half = 5.5 * scale;
   const base = { x: tip.x - ux * size, y: tip.y - uy * size };
   const left = { x: base.x - uy * half, y: base.y + ux * half };
   const right = { x: base.x + uy * half, y: base.y - ux * half };
@@ -1391,7 +1443,29 @@ function buildHighAshAdvice(productStreams, product) {
   if (coalQuality?.summary?.ash > 35) {
     items.push(`导入煤质原煤灰分为 ${fmt(coalQuality.summary.ash, 1)}%，属于高灰入料；建议优先用浮沉数据校准重介密度切割，再调产品流向。`);
   }
-  return [...new Set(items)].slice(0, 4);
+  items.push(...buildBusinessComparisonAdvice(product));
+  return [...new Set(items)].slice(0, 6);
+}
+
+function buildBusinessComparisonAdvice(product) {
+  const expected = coalQuality?.expectedResults;
+  if (!expected) return [];
+  const items = [];
+  const feedRate = getFeed().rate || 1;
+  const simCleanYield = feedRate > 0 ? (product.mass / feedRate) * 100 : 0;
+  if (Number.isFinite(expected.feedRate) && Math.abs(feedRate - expected.feedRate) > Math.max(5, expected.feedRate * 0.02)) {
+    items.push(`入洗量：流程 ${fmt(feedRate)} t/h，预测综合 ${fmt(expected.feedRate)} t/h。`);
+  }
+  if (Number.isFinite(expected.cleanYield) && Math.abs(simCleanYield - expected.cleanYield) > 3) {
+    items.push(`精煤产率：拓扑 ${fmt(simCleanYield, 1)}%，预测综合 ${fmt(expected.cleanYield, 1)}%。`);
+  }
+  if (Number.isFinite(expected.cleanAsh) && Math.abs(product.ash - expected.cleanAsh) > 1.2) {
+    items.push(`精煤灰分：拓扑 ${fmt(product.ash, 1)}%，预测综合 ${fmt(expected.cleanAsh, 1)}%。`);
+  }
+  if (items.length === 0 && expected.sectionTitle) {
+    items.push(`已与预测综合「${expected.sectionTitle.slice(0, 24)}」对齐入洗量与校正灰分，拓扑结果与目标接近。`);
+  }
+  return items;
 }
 
 function isProductPath(nodeId, visited = new Set()) {
@@ -1416,16 +1490,35 @@ function renderCoalQualityView() {
   const sourceLists = coalQuality.sourceLists || [];
   const denseRows = coalQuality.denseFractions || [];
   const productRows = coalQuality.productBalance || [];
+  const screenRows = coalQuality.screenSizing || [];
+  const expected = coalQuality.expectedResults || {};
+  const inputSources = coalQuality.inputSources || {};
   view.className = "coal-quality-view";
   view.innerHTML = `
     <div class="coal-quality-kpis">
       <span>煤层<strong>${s.seam || "-"}</strong></span>
-      <span>原煤灰分<strong>${fmt(s.ash, 2)}%</strong></span>
+      <span>校正灰分<strong>${fmt(s.ash, 2)}%</strong></span>
       <span>Mad 水分<strong>${fmt(s.moisture, 2)}%</strong></span>
       <span>-0.5mm<strong>${fmt(s.fineRatio, 2)}%</strong></span>
     </div>
+    ${inputSources.predictionSheet || inputSources.screenSheet ? `
+      <div class="coal-quality-section-title">输入数据（提供）</div>
+      <div class="coal-quality-list">
+        ${inputSources.screenSheet ? `<span><strong>筛分</strong>${escapeHtml(inputSources.screenSheet)}</span>` : ""}
+        ${inputSources.predictionSheet ? `<span><strong>煤预测</strong>${escapeHtml(inputSources.predictionSheet)}</span>` : ""}
+      </div>
+    ` : ""}
+    ${expected.sectionTitle || Number.isFinite(expected.feedRate) ? `
+      <div class="coal-quality-section-title">预测综合（目标结果）</div>
+      <div class="coal-quality-list">
+        ${expected.sectionTitle ? `<span title="${escapeHtml(expected.sectionTitle)}"><strong>工况</strong>${escapeHtml(expected.sectionTitle.slice(0, 32))}</span>` : ""}
+        ${Number.isFinite(expected.feedRate) ? `<span><strong>入洗量</strong>${fmt(expected.feedRate)} t/h</span>` : ""}
+        ${Number.isFinite(expected.cleanYield) ? `<span><strong>精煤产率</strong>${fmt(expected.cleanYield, 2)}%</span>` : ""}
+        ${Number.isFinite(expected.cleanAsh) ? `<span><strong>精煤灰分</strong>${fmt(expected.cleanAsh, 2)}%</span>` : ""}
+      </div>
+    ` : ""}
     ${sourceLists.length ? `
-      <div class="coal-quality-section-title">已识别清单</div>
+      <div class="coal-quality-section-title">已识别工作表</div>
       <div class="coal-quality-list">
         ${sourceLists.map((item) => `
           <span title="${escapeHtml(item.name)}">
@@ -1436,7 +1529,7 @@ function renderCoalQualityView() {
       </div>
     ` : ""}
     ${productRows.length ? `
-      <div class="coal-quality-section-title">产品平衡</div>
+      <div class="coal-quality-section-title">预测综合 · 产品平衡</div>
       <div class="coal-quality-table-wrap compact">
         <table class="coal-quality-table">
           <thead><tr><th>产品</th><th>产率</th><th>灰分</th><th>水分</th></tr></thead>
@@ -1457,7 +1550,7 @@ function renderCoalQualityView() {
         </table>
       </div>
     ` : ""}
-    <div class="coal-quality-section-title">自然粒级</div>
+    <div class="coal-quality-section-title">2-3煤预测 · 自然粒级</div>
     <div class="coal-quality-table-wrap">
       <table class="coal-quality-table">
         <thead><tr><th>粒级</th><th>产率</th><th>灰分</th><th>Mad</th></tr></thead>
@@ -1466,7 +1559,7 @@ function renderCoalQualityView() {
         </tbody>
       </table>
     </div>
-    <div class="coal-quality-footnote">自然粒级 ${rows.length} 条，自浮 ${denseRows.length} 条，产品平衡 ${productRows.length} 条；筛分/脱泥按自然粒级校核，浅槽/重介按自浮密度级校核。</div>
+    <div class="coal-quality-footnote">输入：2-3筛原始筛分 ${screenRows.length} 条、2-3煤预测自然粒级 ${rows.length} 条；结果：预测综合产品平衡 ${productRows.length} 条。入洗参数与设备密度优先取自预测综合，流程拓扑计算结果可与预测综合对比校核。</div>
   `;
 }
 
@@ -1753,9 +1846,21 @@ function normalizeCoalQuality(raw = null) {
         yield: Number(item.yield),
         ash: Number(item.ash),
         moisture: Number(item.moisture ?? 0),
+        mass: Number(item.mass),
         heat: Number(item.heat),
       }))
       .filter((item) => item.name && Number.isFinite(item.yield) && Number.isFinite(item.ash)) : [],
+    screenSizing: Array.isArray(raw.screenSizing) ? raw.screenSizing
+      .map((item) => ({
+        size: String(item.size || "").trim(),
+        yield: Number(item.yield),
+        ash: Number(item.ash),
+        moisture: Number(item.moisture ?? 0),
+      }))
+      .filter((item) => item.size && Number.isFinite(item.yield)) : [],
+    processSettings: raw.processSettings && typeof raw.processSettings === "object" ? raw.processSettings : null,
+    expectedResults: raw.expectedResults && typeof raw.expectedResults === "object" ? raw.expectedResults : null,
+    inputSources: raw.inputSources && typeof raw.inputSources === "object" ? raw.inputSources : null,
     sourceLists: Array.isArray(raw.sourceLists) ? raw.sourceLists
       .map((item) => ({ name: String(item.name || "").trim(), type: String(item.type || "").trim(), count: Number(item.count) || 0 }))
       .filter((item) => item.name && item.type) : [],
@@ -1851,6 +1956,7 @@ function normalizeImportedScenario(data) {
   const nextCoalQuality = normalizeCoalQuality(data.coalQuality);
   const nextFeed = normalizeTemplateFeed(data.feed);
   applyTopDownLayout(nextNodes);
+  if (nextCoalQuality?.processSettings) applyBusinessSettingsToNodes(nextNodes, nextCoalQuality.processSettings);
   if (nextCoalQuality?.summary) {
     if (Number.isFinite(Number(nextCoalQuality.summary.ash))) nextFeed.ash = Number(nextCoalQuality.summary.ash);
     if (Number.isFinite(Number(nextCoalQuality.summary.moisture))) nextFeed.moisture = Number(nextCoalQuality.summary.moisture);
@@ -2083,7 +2189,7 @@ function downloadExcelImportTemplate() {
 </head>
 <body>
   <h1>煤质数据导入模板</h1>
-  <p class="hint">按你提供的煤质工作簿口径组织：总样、自然级筛分、煤预测、预测综合。导入时系统会优先识别这些业务表，也兼容旧版 feed/nodes/links 表。</p>
+  <p class="hint">按业务口径组织：2-3筛、2-3煤预测为输入数据；预测综合为计算结果（校正灰分、工艺参数、产品平衡）。导入时自动区分输入与结果，也兼容旧版 feed/nodes/links 表。</p>
   ${tableToHtml("2-3总", totalRows)}
   ${tableToHtml("2-3筛", screenRows)}
   ${tableToHtml("2-3自浮", denseRows)}
@@ -2359,51 +2465,211 @@ function applyTopDownLayout(nodeList) {
 
 function businessCoalSectionsToTemplate(sections, filename = "") {
   const names = Object.keys(sections);
-  const predictionName = names.find((name) => /\u7164\u9884\u6d4b/.test(name)) || names.find((name) => /\u9884\u6d4b/.test(name));
-  if (!predictionName) return null;
-  const settingsName = names.find((name) => name.includes("\u9884\u6d4b\u7efc\u5408"));
-  const targetSeam = coalSeamFromText(`${filename} ${predictionName}`);
-  const coalQuality = parseBusinessCoalQuality(sections[predictionName], sections[settingsName] || [], targetSeam);
+  const targetSeam = coalSeamFromText(`${filename} ${names.join(" ")}`);
+  const predictName = pickBusinessSheetName(names, "煤预测", targetSeam);
+  const screenName = pickBusinessSheetName(names, "筛", targetSeam, { exclude: /预测/ });
+  const resultName = pickBusinessSheetName(names, "预测综合", targetSeam);
+  if (!predictName && !screenName) return null;
+
+  const coalQuality = parseBusinessInputData(
+    predictName ? sections[predictName] : [],
+    screenName ? sections[screenName] : [],
+    targetSeam,
+    predictName,
+    screenName,
+  );
+  const resultPack = parseBusinessResultData(resultName ? sections[resultName] : [], targetSeam);
+  Object.assign(coalQuality.summary, resultPack.summary);
+  coalQuality.processSettings = resultPack.settings;
+  coalQuality.productBalance = resultPack.productBalance;
+  coalQuality.expectedResults = resultPack.expectedResults;
   Object.assign(coalQuality, parseBusinessExtras(sections, targetSeam));
   if (!coalQuality?.sizeFractions?.length) return null;
+
   const topology = defaultTopologyTemplateData();
+  applyBusinessSettingsToNodes(topology.nodes, resultPack.settings);
   return {
     name: `${coalQuality.summary.seam || "煤质"}导入方案`,
-    feed: {
-      rate: getFeed().rate || 850,
-      ash: coalQuality.summary.ash,
-      moisture: coalQuality.summary.moisture,
-      fineRatio: coalQuality.summary.fineRatio,
-    },
+    feed: buildFeedFromBusinessData(coalQuality, resultPack),
     coalQuality,
     nodes: topology.nodes,
     links: topology.links,
   };
 }
 
-function parseBusinessCoalQuality(predictionRows = [], settingRows = [], targetSeam = "") {
-  const table = findBusinessSizeTable(predictionRows, targetSeam);
-  const sizeFractions = table.rows;
+function parseBusinessInputData(predictionRows, screenRows, targetSeam, predictName = "", screenName = "") {
+  const table = predictionRows.length ? findBusinessSizeTable(predictionRows, targetSeam) : { seam: "", rows: [], summary: {} };
+  const screenTable = screenRows.length ? parseBusinessScreenSizing(screenRows, targetSeam) : { rows: [], summary: {} };
+  const sizeFractions = table.rows.length ? table.rows : screenTable.rows;
   const weighted = weightedCoalQuality(sizeFractions);
-  const fineRatio = coalFineRatio(sizeFractions, 0.5);
   const summary = {
-    seam: table.seam,
-    ash: Number.isFinite(table.summary.ash) ? table.summary.ash : weighted.ash,
-    moisture: Number.isFinite(table.summary.moisture) ? table.summary.moisture : weighted.moisture,
-    fineRatio,
+    seam: table.seam || screenTable.seam || (targetSeam ? `${targetSeam}煤层` : ""),
+    ash: Number.isFinite(table.summary.ash) ? table.summary.ash : screenTable.summary.ash ?? weighted.ash,
+    moisture: Number.isFinite(table.summary.moisture) ? table.summary.moisture : screenTable.summary.moisture ?? weighted.moisture,
+    fineRatio: coalFineRatio(sizeFractions, 0.5),
   };
-
-  settingRows.forEach((row) => {
-    const firstIndex = row.findIndex((cell) => String(cell ?? "").trim());
-    const label = firstIndex >= 0 ? String(row[firstIndex] ?? "").trim() : "";
-    const value = numberOrBlank(row[firstIndex + 1]) || numberOrBlank(row[firstIndex + 2]) || numberOrBlank(row[firstIndex + 3]);
-    if (/^\s*\d-\d煤层\s*$/.test(label)) summary.seam = label;
-    if (/校正.*灰分|原煤灰分/.test(label) && Number.isFinite(value)) summary.ash = value;
-    if (/水分|Mad/.test(label) && Number.isFinite(value)) summary.moisture = value;
-    if (/fineRatio|-0\.5mm\s*含量|细煤泥比例/.test(label) && Number.isFinite(value)) summary.fineRatio = value;
+  return normalizeCoalQuality({
+    summary,
+    sizeFractions,
+    screenSizing: screenTable.rows,
+    inputSources: {
+      predictionSheet: predictName,
+      screenSheet: screenName,
+    },
   });
+}
 
-  return normalizeCoalQuality({ summary, sizeFractions });
+function parseBusinessResultData(rows = [], targetSeam = "") {
+  const settings = parseBusinessProcessSettings(rows, targetSeam);
+  const balance = parseBusinessProductBalance(rows, targetSeam);
+  const summary = {
+    seam: settings.seam || (targetSeam ? `${targetSeam}煤层` : ""),
+    ash: Number.isFinite(settings.correctedAsh) ? settings.correctedAsh : NaN,
+    moisture: Number.isFinite(settings.feedMoisture) ? settings.feedMoisture : NaN,
+    fineRatio: Number.isFinite(settings.fineSlimeRatio) ? settings.fineSlimeRatio : NaN,
+    rawAshScreen: settings.rawAshScreen,
+    rawAshTotal: settings.rawAshTotal,
+  };
+  if (!Number.isFinite(summary.moisture) && Number.isFinite(balance.feedMoisture)) summary.moisture = balance.feedMoisture;
+  const cleanProducts = balance.products.filter((item) => /精煤|块煤|籽|末精/.test(item.name) && !/小计|原煤/.test(item.name));
+  const rejectProducts = balance.products.filter((item) => /矸|尾|煤泥/.test(item.name) && !/小计|原煤/.test(item.name));
+  const feedRate = Number.isFinite(balance.feedRate)
+    ? balance.feedRate
+    : (Number.isFinite(settings.designCapacity) ? settings.designCapacity : NaN);
+  const expectedResults = {
+    sectionTitle: balance.sectionTitle,
+    feedRate,
+    cleanYield: sumYield(cleanProducts),
+    cleanAsh: yieldWeightedAsh(cleanProducts),
+    rejectYield: sumYield(rejectProducts),
+    rejectAsh: yieldWeightedAsh(rejectProducts),
+    rawYield: balance.products.find((item) => item.name.includes("原煤"))?.yield ?? 100,
+    rawAsh: balance.products.find((item) => item.name.includes("原煤"))?.ash ?? summary.ash,
+  };
+  return {
+    summary,
+    settings,
+    productBalance: balance.products,
+    expectedResults,
+    feedRate,
+  };
+}
+
+function buildFeedFromBusinessData(coalQuality, resultPack) {
+  const s = coalQuality?.summary || {};
+  return {
+    rate: Number.isFinite(resultPack.feedRate) ? resultPack.feedRate : getFeed().rate || 850,
+    ash: Number.isFinite(s.ash) ? s.ash : getFeed().ash,
+    moisture: Number.isFinite(s.moisture) ? s.moisture : getFeed().moisture,
+    fineRatio: Number.isFinite(s.fineRatio) ? s.fineRatio : getFeed().fineRatio,
+  };
+}
+
+function applyBusinessSettingsToNodes(nodeList, settings = {}) {
+  if (!settings || !nodeList?.length) return;
+  const ratioToPercent = (value) => (value <= 1 ? value * 100 : value);
+  nodeList.filter((item) => item.type === "screen").forEach((item) => {
+    if (Number.isFinite(settings.screenCutSize)) item.params.cutSize = settings.screenCutSize;
+    if (Number.isFinite(settings.screenEfficiency)) item.params.efficiency = ratioToPercent(settings.screenEfficiency);
+  });
+  nodeList.filter((item) => item.type === "deslime").forEach((item) => {
+    if (Number.isFinite(settings.deslimeCutSize)) item.params.cutSize = settings.deslimeCutSize;
+    if (Number.isFinite(settings.deslimeEfficiency)) item.params.efficiency = ratioToPercent(settings.deslimeEfficiency);
+  });
+  nodeList.filter((item) => item.type === "shallow").forEach((item) => {
+    if (Number.isFinite(settings.shallowDensity)) item.params.density = settings.shallowDensity;
+  });
+  nodeList.filter((item) => item.type === "dmc").forEach((item) => {
+    if (Number.isFinite(settings.dmcDensity)) item.params.density = settings.dmcDensity;
+  });
+  nodeList.filter((item) => item.type === "slimeCyclone").forEach((item) => {
+    if (Number.isFinite(settings.slimeCutSize)) item.params.cutSize = settings.slimeCutSize;
+    if (Number.isFinite(settings.slimeClassEfficiency)) item.params.overflowRatio = ratioToPercent(settings.slimeClassEfficiency);
+  });
+  nodeList.filter((item) => item.type === "spiral").forEach((item) => {
+    if (Number.isFinite(settings.spiralDensity)) item.params.density = settings.spiralDensity;
+  });
+}
+
+function parseBusinessProcessSettings(rows = [], targetSeam = "") {
+  const settings = { seam: targetSeam ? `${targetSeam}煤层` : "" };
+  rows.forEach((row) => {
+    row.forEach((cell, index) => {
+      const label = String(cell ?? "").trim();
+      if (!label || label.length > 36) return;
+      const value = numberOrBlank(row[index + 1]) ?? numberOrBlank(row[index + 3]);
+      if (/^\s*\d-\d煤层\s*$/.test(label)) settings.seam = label;
+      if (/校正后的原煤灰分/.test(label) && Number.isFinite(value)) settings.correctedAsh = value;
+      if (/大筛分表原始原煤灰分/.test(label) && Number.isFinite(value)) settings.rawAshScreen = value;
+      if (/总样表原煤灰分/.test(label) && Number.isFinite(value)) settings.rawAshTotal = value;
+      if (/末煤次生煤泥率/.test(label) && Number.isFinite(value)) settings.fineSlimeRatio = value;
+      if (/分级粒度/.test(label) && !/煤泥/.test(label) && Number.isFinite(value)) settings.screenCutSize = value;
+      if (/分级效率/.test(label) && !/煤泥/.test(label) && Number.isFinite(value)) settings.screenEfficiency = value;
+      if (/脱粉粒度/.test(label) && Number.isFinite(value)) settings.deslimeCutSize = value;
+      if (/脱粉效率/.test(label) && Number.isFinite(value)) settings.deslimeEfficiency = value;
+      if (/浅槽分选密度/.test(label) && Number.isFinite(value)) settings.shallowDensity = value;
+      if (/重介旋流器分选密度/.test(label) && Number.isFinite(value)) settings.dmcDensity = value;
+      if (/煤泥分级粒度/.test(label) && Number.isFinite(value)) settings.slimeCutSize = value;
+      if (/煤泥分级效率/.test(label) && Number.isFinite(value)) settings.slimeClassEfficiency = value;
+      if (/粗煤泥分选密度/.test(label) && Number.isFinite(value)) settings.spiralDensity = value;
+      if (/设计入洗能力/.test(label) && Number.isFinite(value)) settings.designCapacity = value;
+    });
+    const line = row.join(" ");
+    if (line.includes("设计入洗能力") && Number.isFinite(numberOrBlank(row[8]))) settings.designCapacity = numberOrBlank(row[8]);
+  });
+  return settings;
+}
+
+function parseBusinessScreenSizing(rows = [], targetSeam = "") {
+  const result = [];
+  const summary = {};
+  let currentSize = "";
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r] || [];
+    const sizeCandidate = String(row[1] ?? row[4] ?? "").trim();
+    if (/^\+?\d|^\d|合计|总计|毛煤/.test(sizeCandidate) && !/产物|粒级/.test(sizeCandidate)) {
+      if (!sizeCandidate.includes("合计") && !sizeCandidate.includes("总计")) currentSize = sizeCandidate.replace("合计", "").trim();
+    }
+    const product = String(row[3] ?? row[2] ?? "").trim();
+    if (product !== "煤" || !currentSize) continue;
+    const yieldValue = numberOrBlank(row[5]) ?? numberOrBlank(row[4]);
+    const ash = numberOrBlank(row[8]) ?? numberOrBlank(row[7]);
+    const moisture = numberOrBlank(row[7]) ?? numberOrBlank(row[6]);
+    if (!Number.isFinite(yieldValue)) continue;
+    const existing = result.find((item) => item.size === currentSize);
+    if (existing) {
+      existing.yield += yieldValue;
+      existing.ash = weightedAverage(existing.ash, existing.yield - yieldValue, ash, yieldValue);
+    } else {
+      result.push({
+        size: currentSize,
+        yield: yieldValue,
+        ash: Number.isFinite(ash) ? ash : 0,
+        moisture: Number.isFinite(moisture) ? moisture : 0,
+      });
+    }
+    if (/毛煤总计|总计/.test(sizeCandidate) || /毛煤总计|总计/.test(String(row[0] ?? ""))) {
+      summary.ash = Number.isFinite(ash) ? ash : summary.ash;
+      summary.moisture = Number.isFinite(moisture) ? moisture : summary.moisture;
+    }
+  }
+  return { seam: targetSeam ? `${targetSeam}煤层` : "", rows: result, summary };
+}
+
+function weightedAverage(a, wa, b, wb) {
+  const total = wa + wb;
+  if (total <= 0) return Number.isFinite(b) ? b : a;
+  return ((Number(a) || 0) * wa + (Number(b) || 0) * wb) / total;
+}
+
+function sumYield(items = []) {
+  return items.reduce((sum, item) => sum + numberOrZero(item.yield), 0);
+}
+
+function yieldWeightedAsh(items = []) {
+  const total = sumYield(items);
+  if (total <= 0) return NaN;
+  return items.reduce((sum, item) => sum + numberOrZero(item.yield) * numberOrZero(item.ash), 0) / total;
 }
 
 function parseBusinessExtras(sections = {}, targetSeam = "") {
@@ -2412,7 +2678,7 @@ function parseBusinessExtras(sections = {}, targetSeam = "") {
   const productName = pickBusinessSheetName(names, "预测综合", targetSeam);
   return {
     denseFractions: denseName ? parseBusinessDenseFractions(sections[denseName]) : [],
-    productBalance: productName ? parseBusinessProductBalance(sections[productName]) : [],
+    productBalance: productName ? parseBusinessProductBalance(sections[productName], targetSeam).products : [],
     sourceLists: names
       .map((name) => {
         const type = businessSheetType(name);
@@ -2423,16 +2689,19 @@ function parseBusinessExtras(sections = {}, targetSeam = "") {
   };
 }
 
-function pickBusinessSheetName(names, keyword, targetSeam = "") {
-  const matched = names.filter((name) => name.includes(keyword));
+function pickBusinessSheetName(names, keyword, targetSeam = "", options = {}) {
+  const exclude = options.exclude;
+  let matched = names.filter((name) => name.includes(keyword));
+  if (exclude) matched = matched.filter((name) => !exclude.test(name));
   if (!matched.length) return "";
   return matched.find((name) => targetSeam && name.includes(targetSeam)) || matched[0];
 }
 
 function businessSheetType(name = "") {
-  if (name.includes("预测综合")) return "产品平衡";
-  if (name.includes("煤预测")) return "自然粒级预测";
-  if (name.includes("自浮")) return "密度级自浮";
+  if (name.includes("预测综合")) return "结果-预测综合";
+  if (name.includes("煤预测")) return "输入-煤预测";
+  if (name.includes("筛") && !name.includes("预测")) return "输入-筛分";
+  if (name.includes("自浮")) return "输入-密度级自浮";
   if (name.includes("筛")) return "筛分";
   if (name.includes("总")) return "总样";
   if (name.includes("流程")) return "流程计算";
@@ -2491,27 +2760,74 @@ function denseGroupTitle(rows, headerRow, startCol) {
   return "";
 }
 
-function parseBusinessProductBalance(rows = []) {
-  const headerRow = rows.findIndex((row) => row.some((cell) => String(cell ?? "").includes("产品名称")));
-  if (headerRow < 0) return [];
-  const productCol = Math.max(0, rows[headerRow].findIndex((cell) => String(cell ?? "").includes("产品名称")));
-  const result = [];
-  for (let r = headerRow + 1; r < Math.min(rows.length, headerRow + 36); r++) {
+function parseBusinessProductBalance(rows = [], targetSeam = "") {
+  let sectionStart = -1;
+  let sectionTitle = "";
+  for (let r = 0; r < rows.length; r++) {
+    const text = rows[r].map((cell) => String(cell ?? "")).join(" ");
+    if (!text.includes("产品平衡表")) continue;
+    if (targetSeam && !text.includes(targetSeam) && !text.includes(targetSeam.replace("-", ""))) continue;
+    if (text.includes("只洗块煤")) continue;
+    sectionStart = r;
+    sectionTitle = text.trim();
+    break;
+  }
+  if (sectionStart < 0) {
+    sectionStart = rows.findIndex((row) => row.some((cell) => String(cell ?? "").includes("产品平衡表")));
+    sectionTitle = sectionStart >= 0 ? rows[sectionStart].map((cell) => String(cell ?? "")).join(" ").trim() : "";
+  }
+  if (sectionStart < 0) return { products: [], feedRate: NaN, feedMoisture: NaN, sectionTitle: "" };
+
+  let headerRow = -1;
+  for (let r = sectionStart; r < Math.min(sectionStart + 8, rows.length); r++) {
+    if (rows[r].some((cell) => String(cell ?? "").includes("产品名称"))) {
+      headerRow = r;
+      break;
+    }
+  }
+  if (headerRow < 0) return { products: [], feedRate: NaN, feedMoisture: NaN, sectionTitle };
+
+  const products = [];
+  let feedRate = NaN;
+  let feedMoisture = NaN;
+  for (let r = headerRow + 2; r < Math.min(rows.length, headerRow + 28); r++) {
     const row = rows[r] || [];
-    const name = firstTextCell(row.slice(productCol, productCol + 6), /产品名称|质量|产率|灰分|水分|发热量|备注/);
+    const name = firstTextCell(row.slice(1, 4), /产品名称|质\s*量|产\s*量|发热量|r％|Ad|Mt|S%/);
     if (!name) continue;
-    if (name.includes("合计") || name.includes("原煤")) break;
-    const numbers = row.slice(productCol + 1).map(numberOrBlank).filter(Number.isFinite);
-    if (numbers.length < 2) continue;
-    result.push({
+    const yieldValue = numberOrBlank(row[3]);
+    const ash = numberOrBlank(row[4]);
+    const moisture = numberOrBlank(row[5]);
+    const mass = numberOrBlank(row[7]);
+    if (name.includes("原煤")) {
+      if (Number.isFinite(mass)) feedRate = mass;
+      if (Number.isFinite(moisture)) feedMoisture = moisture;
+      products.push({
+        name,
+        yield: Number.isFinite(yieldValue) ? yieldValue : 100,
+        ash,
+        moisture: Number.isFinite(moisture) ? moisture : 0,
+        mass: Number.isFinite(mass) ? mass : NaN,
+        heat: numberOrBlank(row[10]),
+      });
+      continue;
+    }
+    if (name.includes("小计") || name.includes("设计入洗")) break;
+    if (!Number.isFinite(yieldValue) || !Number.isFinite(ash)) continue;
+    products.push({
       name,
-      yield: numbers[0],
-      ash: numbers[1],
-      moisture: Number.isFinite(numbers[2]) ? numbers[2] : 0,
-      heat: Number.isFinite(numbers[3]) ? numbers[3] : NaN,
+      yield: yieldValue,
+      ash,
+      moisture: Number.isFinite(moisture) ? moisture : 0,
+      mass: Number.isFinite(mass) ? mass : NaN,
+      heat: numberOrBlank(row[10]),
     });
   }
-  return result.slice(0, 16);
+  return {
+    products: products.slice(0, 24),
+    feedRate: Number.isFinite(feedRate) ? feedRate : NaN,
+    feedMoisture,
+    sectionTitle,
+  };
 }
 
 function firstTextCell(cells = [], rejectPattern = null) {
@@ -2798,7 +3114,16 @@ canvas.addEventListener("drop", (event) => {
     renderAll();
   });
 });
-window.addEventListener("resize", renderLinks);
+let linkRefreshTimer = null;
+function scheduleLinkRefresh() {
+  clearTimeout(linkRefreshTimer);
+  linkRefreshTimer = setTimeout(() => renderLinks(), 60);
+}
+
+window.addEventListener("resize", scheduleLinkRefresh);
+if (typeof ResizeObserver !== "undefined") {
+  new ResizeObserver(scheduleLinkRefresh).observe(canvas);
+}
 
 renderLibrary();
 initScenarios();
