@@ -1,10 +1,7 @@
 source_full_scan.xlsx
 full_scan_report.json
 topdown-flow-check.png
-.vercel
 
+.git
+.vercel
 *.log
-.DS_Store
-Thumbs.db
-
-.vercel
