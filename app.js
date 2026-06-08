@@ -102,6 +102,7 @@ let outputStreams = {};
 let linkResults = {};
 let summary = {};
 let coalQuality = null;
+let excelResults = null;
 let linkSource = null;
 let previewPoint = null;
 let scenarios = [];
@@ -1094,6 +1095,14 @@ function calculate() {
     });
   }
   nodes.filter((item) => !handled.has(item.id)).forEach((item) => computeNode(item));
+  excelResults = typeof CoalExcelCalc !== "undefined" && coalQuality?.useExcelEngine
+    ? CoalExcelCalc.run(coalQuality, getFeed())
+    : null;
+  if (excelResults?.products?.length) {
+    coalQuality.computedBalance = excelResults.products;
+    coalQuality.comparison = excelResults.comparison;
+    coalQuality.productComparison = excelResults.recalculatedComparison || excelResults.productComparison || [];
+  }
   updateSummary();
   renderTable();
   renderLinkTable();
@@ -1351,6 +1360,34 @@ function rangePortion(range, from, to) {
 }
 
 function updateSummary() {
+  const feedRate = getFeed().rate || 1;
+  if (excelResults?.cleanMass > 0) {
+    const product = {
+      mass: excelResults.cleanMass,
+      ash: excelResults.cleanAsh || 0,
+      moisture: getFeed().moisture,
+    };
+    const reject = {
+      mass: excelResults.rejectMass || 0,
+      ash: excelResults.rejectAsh || 0,
+      moisture: getFeed().moisture,
+    };
+    const balanceDiff = feedRate - (excelResults.cleanMass + excelResults.rejectMass);
+    summary = { product, reject, middling: { mass: 0, ash: 0 }, water: { mass: 0 }, medium: { mass: 0 }, balanceDiff, accounted: excelResults.cleanMass + excelResults.rejectMass, excelMode: true };
+    document.getElementById("cleanCoal").textContent = `${fmt(product.mass)} t/h`;
+    document.getElementById("cleanCoalRate").textContent = `产率 ${fmt(excelResults.cleanYield, 1)}% · 预测综合`;
+    document.getElementById("middlings").textContent = `${fmt(0)} t/h`;
+    document.getElementById("rejects").textContent = `${fmt(reject.mass)} t/h`;
+    document.getElementById("cleanAsh").textContent = `${fmt(product.ash, 1)}%`;
+    document.getElementById("qualityHint").textContent = excelResults.recalculated
+      ? `采用预测综合最终值，复算灰分 ${fmt(excelResults.recalculated.cleanAsh, 2)}%`
+      : "采用预测综合最终表";
+    document.getElementById("waterLoss").textContent = `${fmt(Math.max(0, balanceDiff))} t/h`;
+    document.getElementById("balanceHint").textContent = `平衡差 ${fmt(balanceDiff, 1)} t/h`;
+    document.getElementById("mediumFlow").textContent = `${fmt(0, 1)} t/h`;
+    return;
+  }
+
   const productStreams = nodes.filter((item) => item.type === "product").flatMap((item) => incomingStreams[item.id] || []);
   const rejectStreams = nodes.filter((item) => item.type === "reject").flatMap((item) => incomingStreams[item.id] || []);
   const waterStreams = nodes.filter((item) => item.type === "water").flatMap((item) => incomingStreams[item.id] || []);
@@ -1361,7 +1398,6 @@ function updateSummary() {
   const middling = mergeStreams(middlingStreams);
   const water = mergeStreams(waterStreams);
   const medium = mergeStreams(mediumStreams);
-  const feedRate = getFeed().rate || 1;
   const accounted = product.mass + reject.mass + middling.mass + water.mass + medium.mass;
   const balanceDiff = feedRate - accounted;
   summary = { product, reject, middling, water, medium, balanceDiff, accounted };
@@ -1449,8 +1485,24 @@ function buildHighAshAdvice(productStreams, product) {
 
 function buildBusinessComparisonAdvice(product) {
   const expected = coalQuality?.expectedResults;
-  if (!expected) return [];
+  if (!expected && !excelResults?.comparison) return [];
   const items = [];
+  if (excelResults?.comparison) {
+    const c = excelResults.comparison;
+    if (Math.abs(c.feedRateDelta) > 5) items.push(`入洗量：公式 ${fmt(excelResults.feedRate)} t/h，预测综合 ${fmt(expected?.feedRate)} t/h。`);
+    if (Math.abs(c.cleanYieldDelta) > 2) items.push(`精煤产率：公式 ${fmt(excelResults.cleanYield, 2)}%，预测综合 ${fmt(expected?.cleanYield, 2)}%。`);
+    if (Math.abs(c.cleanAshDelta) > 0.8) items.push(`精煤灰分：公式 ${fmt(excelResults.cleanAsh, 2)}%，预测综合 ${fmt(expected?.cleanAsh, 2)}%。`);
+    const recalculated = excelResults.recalculated;
+    if (recalculated) {
+      const dy = recalculated.cleanYield - excelResults.cleanYield;
+      const da = recalculated.cleanAsh - excelResults.cleanAsh;
+      if (Math.abs(dy) > 0.5 || Math.abs(da) > 0.3) {
+        items.push(`网页复算校验：精煤产率 ${fmt(recalculated.cleanYield, 2)}%、灰分 ${fmt(recalculated.cleanAsh, 2)}%，与预测综合差 ${fmt(dy, 2)} 产率点 / ${fmt(da, 2)} 灰分点。`);
+      }
+    }
+    if (!items.length) items.push("Excel 公式链计算与「预测综合」目标一致。");
+    return items;
+  }
   const feedRate = getFeed().rate || 1;
   const simCleanYield = feedRate > 0 ? (product.mass / feedRate) * 100 : 0;
   if (Number.isFinite(expected.feedRate) && Math.abs(feedRate - expected.feedRate) > Math.max(5, expected.feedRate * 0.02)) {
@@ -1493,6 +1545,9 @@ function renderCoalQualityView() {
   const screenRows = coalQuality.screenSizing || [];
   const expected = coalQuality.expectedResults || {};
   const inputSources = coalQuality.inputSources || {};
+  const computed = coalQuality.computedBalance || [];
+  const comparison = coalQuality.comparison;
+  const productComparison = comparison?.productComparison || coalQuality.productComparison || [];
   view.className = "coal-quality-view";
   view.innerHTML = `
     <div class="coal-quality-kpis">
@@ -1528,8 +1583,31 @@ function renderCoalQualityView() {
         `).join("")}
       </div>
     ` : ""}
+    ${computed.length ? `
+      <div class="coal-quality-section-title">当前采用 · 产品平衡</div>
+      <div class="coal-quality-table-wrap compact">
+        <table class="coal-quality-table">
+          <thead><tr><th>产品</th><th>产率</th><th>灰分</th><th>水分</th><th>流量</th></tr></thead>
+          <tbody>
+            ${computed.slice(0, 14).map((item) => `<tr><td>${escapeHtml(item.name)}</td><td>${fmt(item.yield, 2)}%</td><td>${fmt(item.ash, 2)}%</td><td>${fmt(item.moisture, 2)}%</td><td>${fmt(item.mass)} t/h</td></tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+      ${comparison ? `<div class="coal-quality-footnote">${excelResults?.mode === "imported-balance-formula" ? "采用预测综合最终表；" : ""}与预测综合对比：精煤产率差 ${fmt(comparison.cleanYieldDelta, 2)} 点，灰分差 ${fmt(comparison.cleanAshDelta, 2)} 点${Number.isFinite(comparison.matchedProducts) ? `；逐项匹配 ${comparison.matchedProducts}/${comparison.totalProducts}` : ""}。</div>` : ""}
+    ` : ""}
+    ${productComparison.length ? `
+      <div class="coal-quality-section-title">复算校验 vs 预测综合（产率 r%）</div>
+      <div class="coal-quality-table-wrap compact">
+        <table class="coal-quality-table">
+          <thead><tr><th>单元格</th><th>产品</th><th>网页复算</th><th>预测综合</th><th>偏差</th><th></th></tr></thead>
+          <tbody>
+            ${productComparison.map((item) => `<tr><td>${escapeHtml(item.ref)}</td><td>${escapeHtml(item.name)}</td><td>${fmt(item.calcYield, 3)}%</td><td>${fmt(item.expYield, 3)}%</td><td>${fmt(item.yieldDelta, 3)}</td><td>${item.ok ? "✓" : "△"}</td></tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+    ` : ""}
     ${productRows.length ? `
-      <div class="coal-quality-section-title">预测综合 · 产品平衡</div>
+      <div class="coal-quality-section-title">预测综合 · 产品平衡（Excel原值）</div>
       <div class="coal-quality-table-wrap compact">
         <table class="coal-quality-table">
           <thead><tr><th>产品</th><th>产率</th><th>灰分</th><th>水分</th></tr></thead>
@@ -1559,7 +1637,7 @@ function renderCoalQualityView() {
         </tbody>
       </table>
     </div>
-    <div class="coal-quality-footnote">输入：2-3筛原始筛分 ${screenRows.length} 条、2-3煤预测自然粒级 ${rows.length} 条；结果：预测综合产品平衡 ${productRows.length} 条。入洗参数与设备密度优先取自预测综合，流程拓扑计算结果可与预测综合对比校核。</div>
+    <div class="coal-quality-footnote">输入：2-3筛 ${screenRows.length} 条、2-3煤预测 ${rows.length} 条；预测综合 ${productRows.length} 条；公式重算 ${computed.length} 条。核心公式：NORMSDIST 分配率、SUMPRODUCT 灰分、Mt=Mf+Mad*(100-Mf)/100。</div>
   `;
 }
 
@@ -1576,7 +1654,7 @@ function renderCoalQualityBadge() {
   }
   const s = coalQuality.summary || {};
   badge.classList.remove("hidden");
-  badge.textContent = `已导入煤质，画布节点已按煤质数据重算`;
+  badge.textContent = coalQuality.useExcelEngine ? `已导入煤质 · Excel公式计算已启用` : `已导入煤质，画布节点已按煤质数据重算`;
   strip.classList.remove("hidden");
   strip.innerHTML = `
     <span>煤层<strong>${s.seam || "-"}</strong></span>
@@ -1861,9 +1939,20 @@ function normalizeCoalQuality(raw = null) {
     processSettings: raw.processSettings && typeof raw.processSettings === "object" ? raw.processSettings : null,
     expectedResults: raw.expectedResults && typeof raw.expectedResults === "object" ? raw.expectedResults : null,
     inputSources: raw.inputSources && typeof raw.inputSources === "object" ? raw.inputSources : null,
+    useExcelEngine: Boolean(raw.useExcelEngine),
+    computedBalance: Array.isArray(raw.computedBalance) ? raw.computedBalance : [],
+    comparison: raw.comparison && typeof raw.comparison === "object" ? raw.comparison : null,
     sourceLists: Array.isArray(raw.sourceLists) ? raw.sourceLists
       .map((item) => ({ name: String(item.name || "").trim(), type: String(item.type || "").trim(), count: Number(item.count) || 0 }))
       .filter((item) => item.name && item.type) : [],
+    block248BB: Array.isArray(raw.block248BB) ? raw.block248BB
+      .map((item) => ({
+        density: String(item.density || "").trim(),
+        densityMid: Number(item.densityMid),
+        yieldInClass: Number(item.yieldInClass),
+        ash: Number(item.ash),
+      }))
+      .filter((item) => item.density && Number.isFinite(item.yieldInClass)) : [],
   };
 }
 
@@ -2484,6 +2573,17 @@ function businessCoalSectionsToTemplate(sections, filename = "") {
   coalQuality.productBalance = resultPack.productBalance;
   coalQuality.expectedResults = resultPack.expectedResults;
   Object.assign(coalQuality, parseBusinessExtras(sections, targetSeam));
+  coalQuality.useExcelEngine = true;
+  if (!coalQuality.processSettings) coalQuality.processSettings = resultPack.settings;
+  if (resultName && sections[resultName]) {
+    Object.assign(coalQuality.processSettings, parseBusinessEpTable(sections[resultName]));
+  }
+  if (predictName && sections[predictName]) {
+    const predRows = sections[predictName];
+    coalQuality.processSettings.partitionEpBySize = parseBusinessPartitionEp(predRows);
+    Object.assign(coalQuality.processSettings, parseBusinessFineMeta(predRows));
+    coalQuality.block248BB = parseBusinessBlock248BB(predRows);
+  }
   if (!coalQuality?.sizeFractions?.length) return null;
 
   const topology = defaultTopologyTemplateData();
@@ -2500,7 +2600,10 @@ function businessCoalSectionsToTemplate(sections, filename = "") {
 function parseBusinessInputData(predictionRows, screenRows, targetSeam, predictName = "", screenName = "") {
   const table = predictionRows.length ? findBusinessSizeTable(predictionRows, targetSeam) : { seam: "", rows: [], summary: {} };
   const screenTable = screenRows.length ? parseBusinessScreenSizing(screenRows, targetSeam) : { rows: [], summary: {} };
-  const sizeFractions = table.rows.length ? table.rows : screenTable.rows;
+  let sizeFractions = table.rows.length ? table.rows : screenTable.rows;
+  if (predictionRows.length) {
+    sizeFractions = mergeSizeProcessingFactors(sizeFractions, parseBusinessSizeProcessing(predictionRows));
+  }
   const weighted = weightedCoalQuality(sizeFractions);
   const summary = {
     seam: table.seam || screenTable.seam || (targetSeam ? `${targetSeam}煤层` : ""),
@@ -2616,8 +2719,51 @@ function parseBusinessProcessSettings(rows = [], targetSeam = "") {
     });
     const line = row.join(" ");
     if (line.includes("设计入洗能力") && Number.isFinite(numberOrBlank(row[8]))) settings.designCapacity = numberOrBlank(row[8]);
+    if (Number.isFinite(numberOrBlank(row[9]))) settings.annualCapacity = numberOrBlank(row[9]);
   });
   return settings;
+}
+
+function parseBusinessEpTable(rows = []) {
+  const table = { sizeEpRows: [] };
+  rows.forEach((row) => {
+    const sizeLabel = String(row[5] ?? "").trim();
+    const cutLower = numberOrBlank(row[6]);
+    const shallowEp = numberOrBlank(row[7]);
+    const dmcEp = numberOrBlank(row[8]);
+    const spiralI = numberOrBlank(row[9]);
+    if (sizeLabel && /mm|\+|\d-\d|总计|小计/.test(sizeLabel) && !/粒级|下限|偏差|不完善/.test(sizeLabel)) {
+      table.sizeEpRows.push({ size: sizeLabel, cutLower, shallowEp, dmcEp, spiralI });
+    }
+    if (Number.isFinite(shallowEp) && sizeLabel === "+150") table.shallowEp = shallowEp;
+    if (Number.isFinite(dmcEp) && sizeLabel === "+150") table.dmcEp = dmcEp;
+  });
+  if (!Number.isFinite(table.shallowEp) && table.sizeEpRows.length) {
+    const first = table.sizeEpRows.find((item) => Number.isFinite(item.shallowEp));
+    table.shallowEp = first?.shallowEp ?? 0.02;
+  }
+  if (!Number.isFinite(table.dmcEp) && table.sizeEpRows.length) {
+    const first = table.sizeEpRows.find((item) => Number.isFinite(item.dmcEp));
+    table.dmcEp = first?.dmcEp ?? 0.03;
+  }
+  table.externalMoisture = 10;
+  table.defaultMad = 2.56;
+  table.annualCapacity = 4;
+  return table;
+}
+
+/** 2-3煤预测 331-346 行 P 列：209 块 DMC 分配不完善度 I */
+function parseBusinessPartitionEp(rows = []) {
+  const map = {};
+  rows.forEach((row) => {
+    const size = String(row?.[1] ?? "").trim();
+    if (!size || !/^\+?\d|^\d-\d/.test(size) || /合计|小计|总计|粒级|产品/.test(size)) return;
+    const pEp = numberOrBlank(row?.[15]);
+    if (Number.isFinite(pEp) && pEp > 0 && pEp <= 1) {
+      map[normalizeBusinessSizeLabel(size)] = pEp;
+    }
+  });
+  return map;
 }
 
 function parseBusinessScreenSizing(rows = [], targetSeam = "") {
@@ -2672,12 +2818,96 @@ function yieldWeightedAsh(items = []) {
   return items.reduce((sum, item) => sum + numberOrZero(item.yield) * numberOrZero(item.ash), 0) / total;
 }
 
+function parseBusinessBlock248BB(rows = []) {
+  const DENSITY_LABELS = ["<1.30", "1.30-1.40", "1.40-1.50", "1.50-1.60", "1.60-1.70", "1.70-1.80", "1.80-2.00", ">2.00"];
+  const DENSITY_MID = [1.2, 1.35, 1.45, 1.55, 1.65, 1.75, 1.9, 2.1];
+  let start = -1;
+  for (let r = 0; r < rows.length; r++) {
+    const az = String(rows[r]?.[51] ?? rows[r]?.[52] ?? "").trim();
+    if (az.includes("0.5-0.25") || az.includes("0.5-0.25/0.15")) {
+      start = r + 2;
+      break;
+    }
+  }
+  if (start < 0) {
+    for (let r = 0; r < rows.length; r++) {
+      const density = String(rows[r]?.[1] ?? "").trim();
+      const bb = numberOrBlank(rows[r]?.[53]);
+      if (density === "<1.30" && Number.isFinite(bb) && bb > 5 && bb < 15) {
+        start = r;
+        break;
+      }
+    }
+  }
+  if (start < 0) return [];
+  const result = [];
+  for (let r = start; r < Math.min(rows.length, start + 10); r++) {
+    const row = rows[r] || [];
+    const density = String(row[1] ?? "").trim();
+    if (!density || /合计|密度|占全样|占本级/.test(density)) break;
+    const idx = DENSITY_LABELS.indexOf(density);
+    const yieldInClass = numberOrBlank(row[53]);
+    const ash = numberOrBlank(row[54]);
+    if (!Number.isFinite(yieldInClass)) continue;
+    result.push({
+      density,
+      densityMid: idx >= 0 ? DENSITY_MID[idx] : numberOrBlank(row[2]),
+      yieldInClass,
+      ash: Number.isFinite(ash) ? ash : 0,
+    });
+  }
+  return result;
+}
+
+/** AR163 超细粒级入洗因子、AT163 细煤泥产率、U 列螺旋 Ep（BD261） */
+function parseBusinessFineMeta(rows = []) {
+  const meta = {};
+  rows.forEach((row, idx) => {
+    const line = row.map((cell) => String(cell ?? "")).join(" ");
+    if (/煤泥/.test(line) && /合计/.test(line)) {
+      const slimeYield = numberOrBlank(row[45]);
+      const slimeAsh = numberOrBlank(row[46]);
+      if (Number.isFinite(slimeYield)) meta.slimeTotalYield = slimeYield;
+      if (Number.isFinite(slimeAsh)) meta.slimeTotalAsh = slimeAsh;
+    }
+    const ar = numberOrBlank(row[43]);
+    if (Number.isFinite(ar) && ar > 1 && ar < 30 && /煤泥|合计|小计/.test(line)) {
+      meta.extraFineFactor = ar;
+    }
+    const size = String(row[1] ?? "").trim();
+    if (size.includes("0.5-0.25") || size.includes("0.15")) {
+      const spiralEp = numberOrBlank(row[20]);
+      if (Number.isFinite(spiralEp) && spiralEp > 0 && spiralEp <= 1) meta.spiralFineEp = spiralEp;
+    }
+  });
+  if (!Number.isFinite(meta.extraFineFactor)) {
+    const row163 = rows[162];
+    if (row163) {
+      const ar163 = numberOrBlank(row163[43]);
+      if (Number.isFinite(ar163) && ar163 > 1) meta.extraFineFactor = ar163;
+      const at163 = numberOrBlank(row163[45]);
+      const ao163 = numberOrBlank(row163[40]);
+      if (Number.isFinite(at163) && at163 > 1) {
+        meta.slimeTotalYield = at163;
+        meta.fineSlimeRatio = at163;
+      }
+      if (Number.isFinite(ao163)) meta.slimeTotalAsh = ao163;
+    }
+  }
+  return meta;
+}
+
 function parseBusinessExtras(sections = {}, targetSeam = "") {
   const names = Object.keys(sections);
   const denseName = pickBusinessSheetName(names, "自浮", targetSeam);
+  const predictName = pickBusinessSheetName(names, "煤预测", targetSeam);
   const productName = pickBusinessSheetName(names, "预测综合", targetSeam);
+  const denseFromFloat = denseName ? parseBusinessDenseFractions(sections[denseName]) : [];
+  const denseFromPredict = predictName ? parseBusinessDenseFromPrediction(sections[predictName]) : [];
+  const predictRows = predictName ? sections[predictName] : [];
   return {
-    denseFractions: denseName ? parseBusinessDenseFractions(sections[denseName]) : [],
+    denseFractions: mergeDenseFractionSources(denseFromPredict, denseFromFloat),
+    block248BB: predictRows.length ? parseBusinessBlock248BB(predictRows) : [],
     productBalance: productName ? parseBusinessProductBalance(sections[productName], targetSeam).products : [],
     sourceLists: names
       .map((name) => {
@@ -2716,6 +2946,149 @@ function businessSheetType(name = "") {
 
 function countMeaningfulRows(rows = []) {
   return rows.filter((row) => row.some((cell) => String(cell ?? "").trim())).length;
+}
+
+function normalizeBusinessSizeLabel(text) {
+  return String(text ?? "")
+    .replace(/[＋]/g, "+")
+    .replace(/[－–—]/g, "-")
+    .replace(/\s+/g, "")
+    .replace(/mm/gi, "");
+}
+
+function mergeSizeProcessingFactors(sizeRows = [], factorRows = []) {
+  if (!factorRows.length) return sizeRows;
+  const factorMap = Object.fromEntries(
+    factorRows.map((row) => [normalizeBusinessSizeLabel(row.size), row]),
+  );
+  return sizeRows.map((row) => {
+    const key = normalizeBusinessSizeLabel(row.size);
+    const extra = factorMap[key];
+    if (!extra) return row;
+    return {
+      ...row,
+      processedYield: Number.isFinite(extra.processedYield) ? extra.processedYield : row.processedYield,
+      dmcFactor: Number.isFinite(extra.dmcFactor) ? extra.dmcFactor : row.dmcFactor,
+      arFactor: Number.isFinite(extra.arFactor) ? extra.arFactor : row.arFactor,
+      fineFactor: Number.isFinite(extra.fineFactor) ? extra.fineFactor : row.fineFactor,
+    };
+  });
+}
+
+/** 2-3煤预测 134-149 行：AF 块煤分选入洗量、AK 末煤分选入洗量 */
+function parseBusinessSizeProcessing(rows = []) {
+  let headerRow = -1;
+  for (let r = 0; r < rows.length; r++) {
+    const line = rows[r].map((cell) => String(cell ?? "")).join(" ");
+    if (line.includes("粒级") && line.includes("占全样") && /AF|筛上|脱粉/.test(line)) {
+      headerRow = r;
+      break;
+    }
+    if (line.includes("粒级(mm)") && rows[r + 1]?.some((cell) => String(cell ?? "").includes("占全样"))) {
+      headerRow = r;
+      break;
+    }
+  }
+  if (headerRow < 0) {
+    for (let r = 0; r < rows.length; r++) {
+      const size = String(rows[r]?.[1] ?? rows[r]?.[2] ?? "").trim();
+      if (size === "+150" && Number.isFinite(numberOrBlank(rows[r]?.[31]))) {
+        headerRow = r - 1;
+        break;
+      }
+    }
+  }
+  if (headerRow < 0) return [];
+
+  const result = [];
+  for (let r = headerRow + 1; r < Math.min(rows.length, headerRow + 20); r++) {
+    const row = rows[r] || [];
+    const size = String(row[1] ?? row[2] ?? "").trim();
+    if (!size || /合计|总计|粒级/.test(size)) break;
+    const processedYield = numberOrBlank(row[31]);
+    const dmcFactor = numberOrBlank(row[36]);
+    const arFactor = numberOrBlank(row[43]);
+    const fineFactor = numberOrBlank(row[50]);
+    if ([processedYield, dmcFactor, arFactor, fineFactor].some(Number.isFinite)) {
+      result.push({
+        size,
+        processedYield,
+        dmcFactor,
+        arFactor,
+        fineFactor,
+      });
+    }
+  }
+  return result;
+}
+
+/** 2-3煤预测 117-126 行：各粒级浮沉密度组（配采后） */
+function parseBusinessDenseFromPrediction(rows = []) {
+  let titleRow = -1;
+  for (let r = 0; r < rows.length; r++) {
+    const line = rows[r].map((cell) => String(cell ?? "")).join(" ");
+    if (line.includes("配采后") && /150|50-25|25-13/.test(line)) {
+      titleRow = r;
+      break;
+    }
+  }
+  if (titleRow < 0) return [];
+
+  let headerRow = -1;
+  for (let r = titleRow; r < Math.min(rows.length, titleRow + 4); r++) {
+    if (rows[r].some((cell) => String(cell ?? "").includes("密度级"))) {
+      headerRow = r;
+      break;
+    }
+  }
+  if (headerRow < 0) return [];
+
+  const groupDefs = [
+    { name: "+150", yieldCol: 2, ashCol: 3 },
+    { name: "150-50", yieldCol: 5, ashCol: 6 },
+    { name: "50-25", yieldCol: 8, ashCol: 9 },
+    { name: "25-13", yieldCol: 11, ashCol: 12 },
+    { name: "13-10", yieldCol: 14, ashCol: 15 },
+    { name: "10-8", yieldCol: 17, ashCol: 18 },
+    { name: "8-6", yieldCol: 20, ashCol: 21 },
+    { name: "6-3", yieldCol: 23, ashCol: 24 },
+    { name: "3-2", yieldCol: 26, ashCol: 27 },
+    { name: "1.5-1", yieldCol: 29, ashCol: 30 },
+    { name: "1-0.5", yieldCol: 32, ashCol: 33 },
+  ];
+
+  const result = [];
+  for (let r = headerRow + 1; r < Math.min(rows.length, headerRow + 12); r++) {
+    const density = String(rows[r]?.[1] ?? "").trim();
+    if (!density) continue;
+    if (/合计|总计/.test(density)) break;
+    if (!/[<>]|-|^\d/.test(density)) continue;
+    groupDefs.forEach(({ name, yieldCol, ashCol }) => {
+      const yieldInClass = numberOrBlank(rows[r]?.[yieldCol]);
+      const ash = numberOrBlank(rows[r]?.[ashCol]);
+      if (!Number.isFinite(yieldInClass) && !Number.isFinite(ash)) return;
+      result.push({
+        group: name,
+        density,
+        yieldInClass: Number.isFinite(yieldInClass) ? yieldInClass : 0,
+        ash: Number.isFinite(ash) ? ash : 0,
+      });
+    });
+  }
+  return result;
+}
+
+function mergeDenseFractionSources(primary = [], secondary = []) {
+  const map = new Map();
+  secondary.forEach((row) => {
+    const key = `${normalizeBusinessSizeLabel(row.group)}|${String(row.density ?? "").trim()}`;
+    map.set(key, row);
+  });
+  primary.forEach((row) => {
+    const key = `${normalizeBusinessSizeLabel(row.group)}|${String(row.density ?? "").trim()}`;
+    map.set(key, row);
+  });
+  return Array.from(map.values());
 }
 
 function parseBusinessDenseFractions(rows = []) {
@@ -2798,7 +3171,7 @@ function parseBusinessProductBalance(rows = [], targetSeam = "") {
     const ash = numberOrBlank(row[4]);
     const moisture = numberOrBlank(row[5]);
     const mass = numberOrBlank(row[7]);
-    if (name.includes("原煤")) {
+    if (name === "原煤") {
       if (Number.isFinite(mass)) feedRate = mass;
       if (Number.isFinite(moisture)) feedMoisture = moisture;
       products.push({
@@ -2809,9 +3182,10 @@ function parseBusinessProductBalance(rows = [], targetSeam = "") {
         mass: Number.isFinite(mass) ? mass : NaN,
         heat: numberOrBlank(row[10]),
       });
-      continue;
+      break;
     }
-    if (name.includes("小计") || name.includes("设计入洗")) break;
+    if (name.includes("小计")) continue;
+    if (name.includes("设计入洗")) break;
     if (!Number.isFinite(yieldValue) || !Number.isFinite(ash)) continue;
     products.push({
       name,
@@ -3051,6 +3425,7 @@ function loadScenario(id) {
 function applyScenario(scenario) {
   setFeed(scenario.feed || { rate: 850, ash: 28.5, moisture: 9.5, fineRatio: 16 });
   coalQuality = scenario.coalQuality || null;
+  excelResults = null;
   nodes = (scenario.nodes || []).map(cloneNode);
   if (scenario.layoutDirection !== "top-down" || scenario.layoutVersion !== LAYOUT_VERSION) applyTopDownLayout(nodes);
   links = (scenario.links || []).map((item) => ({ ...item }));

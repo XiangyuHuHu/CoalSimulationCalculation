@@ -1,7 +1,16 @@
 source_full_scan.xlsx
 full_scan_report.json
+excel_formula_audit.json
+excel_chain_audit.json
+excel_chain_report.txt
+audit_excel_chain.py
+inspect_excel_audit.py
+validate_block170.py
+validate_full_chain.py
 topdown-flow-check.png
 .vercel
+node_modules/
+~$*.xlsx
 
 *.log
 .DS_Store
