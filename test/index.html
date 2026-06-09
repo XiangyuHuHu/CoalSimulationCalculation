@@ -79,6 +79,7 @@
       background: #fff;
       cursor: pointer;
     }
+    .hidden-file { display: none; }
     main {
       display: grid;
       gap: 14px;
@@ -228,6 +229,10 @@
         <input id="densityInput" type="number" min="1.3" max="2.0" step="0.1" value="1.6" />
       </label>
       <input id="densityRange" type="range" min="1.3" max="2.0" step="0.1" value="1.6" />
+      <button id="importBtn" type="button">导入数据</button>
+      <input id="importFile" class="hidden-file" type="file" accept=".json,.csv,application/json,text/csv" />
+      <button id="exportJsonBtn" type="button">导出JSON</button>
+      <button id="exportCsvBtn" type="button">导出CSV</button>
       <button id="resetBtn" type="button">恢复默认数据</button>
       <a href="../index.html"><button type="button">返回主流程</button></a>
     </div>
@@ -451,6 +456,172 @@
       renderResults();
     }
 
+    function currentResults() {
+      const density = Number(densityInput.value) || 1.6;
+      return groups.map((group) => calcGroup(group, density)).map((result) => ({
+        size: result.size,
+        cleanAsh: Number(fmt(result.cleanAsh)),
+        cleanYield: Number(fmt(result.cleanYield)),
+        rejectAsh: Number(fmt(result.rejectAsh)),
+        rejectYield: Number(fmt(result.rejectYield)),
+      }));
+    }
+
+    function exportPayload() {
+      return {
+        version: 1,
+        density: Number(densityInput.value) || 1.6,
+        densityRows: densityRows.map((row) => row.label),
+        groups: groups.map((group) => ({
+          size: group.size,
+          rows: group.rows.map((row, index) => ({
+            density: densityRows[index].label,
+            grade: Number(row[0]) || 0,
+            ash: Number(row[1]) || 0,
+            yield: Number(row[2]) || 0,
+          })),
+          slime: {
+            grade: Number(group.slime[0]) || 0,
+            ash: Number(group.slime[1]) || 0,
+            yield: Number(group.slime[2]) || 0,
+          },
+        })),
+        results: currentResults(),
+      };
+    }
+
+    function downloadBlob(content, filename, type) {
+      const blob = new Blob([content], { type });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function csvEscape(value) {
+      const text = String(value ?? "");
+      return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    }
+
+    function toCsv() {
+      const payload = exportPayload();
+      const lines = [
+        ["类型", "粒级", "密度级", "占本级", "灰分", "占全样", "精煤灰分", "精煤产率", "矸石灰分", "矸石产率"],
+      ];
+      payload.groups.forEach((group) => {
+        const result = payload.results.find((item) => item.size === group.size) || {};
+        group.rows.forEach((row) => {
+          lines.push(["浮沉", group.size, row.density, row.grade, row.ash, row.yield, result.cleanAsh, result.cleanYield, result.rejectAsh, result.rejectYield]);
+        });
+        lines.push(["煤泥", group.size, "浮沉煤泥", group.slime.grade, group.slime.ash, group.slime.yield, result.cleanAsh, result.cleanYield, result.rejectAsh, result.rejectYield]);
+      });
+      return "\ufeff" + lines.map((line) => line.map(csvEscape).join(",")).join("\n");
+    }
+
+    function parseCsv(text) {
+      const rows = [];
+      let row = [];
+      let cell = "";
+      let quoted = false;
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        const next = text[i + 1];
+        if (quoted && ch === "\"" && next === "\"") {
+          cell += "\"";
+          i++;
+        } else if (ch === "\"") {
+          quoted = !quoted;
+        } else if (!quoted && ch === ",") {
+          row.push(cell);
+          cell = "";
+        } else if (!quoted && (ch === "\n" || ch === "\r")) {
+          if (ch === "\r" && next === "\n") i++;
+          row.push(cell);
+          if (row.some((item) => item.trim())) rows.push(row);
+          row = [];
+          cell = "";
+        } else {
+          cell += ch;
+        }
+      }
+      row.push(cell);
+      if (row.some((item) => item.trim())) rows.push(row);
+      return rows;
+    }
+
+    function applyPayload(payload) {
+      const nextGroups = payload.groups?.map((group) => {
+        const rowsByDensity = Object.fromEntries((group.rows || []).map((row) => [row.density, row]));
+        return {
+          size: String(group.size || "").trim(),
+          rows: densityRows.map((density) => {
+            const row = rowsByDensity[density.label] || {};
+            return [Number(row.grade) || 0, Number(row.ash) || 0, Number(row.yield) || 0];
+          }),
+          slime: [
+            Number(group.slime?.grade) || 0,
+            Number(group.slime?.ash) || 0,
+            Number(group.slime?.yield) || 0,
+          ],
+        };
+      }).filter((group) => group.size);
+      if (!nextGroups?.length) throw new Error("没有识别到粒级数据");
+      groups = nextGroups;
+      if (Number.isFinite(Number(payload.density))) {
+        densityInput.value = fmt(Number(payload.density), 1);
+        densityRange.value = fmt(Number(payload.density), 1);
+      }
+      renderTable();
+      renderResults();
+    }
+
+    function applyCsv(text) {
+      const rows = parseCsv(text.replace(/^\ufeff/, ""));
+      const header = rows.shift() || [];
+      const index = (name) => header.findIndex((item) => item.trim() === name);
+      const typeIndex = index("类型");
+      const sizeIndex = index("粒级");
+      const densityIndex = index("密度级");
+      const gradeIndex = index("占本级");
+      const ashIndex = index("灰分");
+      const yieldIndex = index("占全样");
+      if ([typeIndex, sizeIndex, densityIndex, gradeIndex, ashIndex, yieldIndex].some((i) => i < 0)) {
+        throw new Error("CSV 表头需要包含：类型,粒级,密度级,占本级,灰分,占全样");
+      }
+      const map = new Map();
+      rows.forEach((row) => {
+        const size = String(row[sizeIndex] || "").trim();
+        if (!size) return;
+        if (!map.has(size)) map.set(size, { size, rows: [], slime: { grade: 0, ash: 0, yield: 0 } });
+        const group = map.get(size);
+        const item = {
+          density: String(row[densityIndex] || "").trim(),
+          grade: Number(row[gradeIndex]) || 0,
+          ash: Number(row[ashIndex]) || 0,
+          yield: Number(row[yieldIndex]) || 0,
+        };
+        if (String(row[typeIndex] || "").includes("煤泥")) {
+          group.slime = { grade: item.grade, ash: item.ash, yield: item.yield };
+        } else {
+          group.rows.push(item);
+        }
+      });
+      applyPayload({ groups: Array.from(map.values()) });
+    }
+
+    async function importFile(file) {
+      const text = await file.text();
+      if (/\.csv$/i.test(file.name)) {
+        applyCsv(text);
+      } else {
+        applyPayload(JSON.parse(text));
+      }
+    }
+
     table.addEventListener("input", updateCell);
     table.addEventListener("blur", (event) => {
       const cell = event.target.closest("[data-group]");
@@ -458,6 +629,24 @@
     }, true);
     densityInput.addEventListener("input", () => syncDensity(densityInput));
     densityRange.addEventListener("input", () => syncDensity(densityRange));
+    document.getElementById("importBtn").addEventListener("click", () => document.getElementById("importFile").click());
+    document.getElementById("importFile").addEventListener("change", async (event) => {
+      const file = event.target.files?.[0];
+      if (!file) return;
+      try {
+        await importFile(file);
+      } catch (error) {
+        alert(`导入失败：${error.message}`);
+      } finally {
+        event.target.value = "";
+      }
+    });
+    document.getElementById("exportJsonBtn").addEventListener("click", () => {
+      downloadBlob(JSON.stringify(exportPayload(), null, 2), "浮沉分选测试数据.json", "application/json;charset=utf-8");
+    });
+    document.getElementById("exportCsvBtn").addEventListener("click", () => {
+      downloadBlob(toCsv(), "浮沉分选测试数据.csv", "text/csv;charset=utf-8");
+    });
     document.getElementById("resetBtn").addEventListener("click", () => {
       groups = structuredClone(defaultGroups);
       renderTable();
