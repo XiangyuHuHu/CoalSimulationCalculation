@@ -607,12 +607,30 @@ const CoalExcelCalc = (() => {
   function run(coalQuality, feed) {
     if (!coalQuality) return null;
     const settings = coalQuality.processSettings || {};
+    const baselineAsh = Number(coalQuality?.baselineFeed?.ash ?? coalQuality?.summary?.ash ?? settings?.correctedAsh);
+    const feedAsh = Number(feed?.ash);
+    const ashAdjusted = Number.isFinite(baselineAsh) && Number.isFinite(feedAsh) && Math.abs(feedAsh - baselineAsh) > 0.05;
+
     let fromWash = null;
     if (coalQuality.denseFractions?.length && coalQuality.sizeFractions?.length) {
       fromWash = computeFromWashability(coalQuality, feed);
     }
     if (coalQuality.productBalance?.length) {
       const fromBalance = recalculateFromImportedBalance(coalQuality.productBalance, feed, settings, coalQuality);
+      if (fromWash && ashAdjusted) {
+        fromWash.feedAdjusted = true;
+        fromWash.comparison = {
+          feedAshDelta: feedAsh - baselineAsh,
+          cleanYieldDelta: fromWash.cleanYield - (fromBalance.cleanYield || 0),
+          cleanAshDelta: fromWash.cleanAsh - (fromBalance.cleanAsh || 0),
+          rejectYieldDelta: fromWash.rejectYield - (fromBalance.rejectYield || 0),
+          productComparison: buildProductComparison(fromWash.products, coalQuality.productBalance),
+          matchedProducts: 0,
+          totalProducts: 0,
+        };
+        fromWash.productComparison = fromWash.comparison.productComparison;
+        return fromWash;
+      }
       if (fromWash) {
         fromBalance.recalculated = fromWash;
         fromBalance.recalculatedComparison = buildProductComparison(fromWash.products, coalQuality.productBalance);

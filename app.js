@@ -1095,8 +1095,12 @@ function calculate() {
     });
   }
   nodes.filter((item) => !handled.has(item.id)).forEach((item) => computeNode(item));
-  excelResults = typeof CoalExcelCalc !== "undefined" && coalQuality?.useExcelEngine
-    ? CoalExcelCalc.run(coalQuality, getFeed())
+  const feed = getFeed();
+  const qualityForExcel = coalQuality?.useExcelEngine && isFeedAshOverridden(feed, coalQuality)
+    ? applyFeedAshToCoalQuality(coalQuality, feed)
+    : coalQuality;
+  excelResults = typeof CoalExcelCalc !== "undefined" && qualityForExcel?.useExcelEngine
+    ? CoalExcelCalc.run(qualityForExcel, feed)
     : null;
   if (excelResults?.products?.length) {
     coalQuality.computedBalance = excelResults.products;
@@ -1379,7 +1383,9 @@ function updateSummary() {
     document.getElementById("middlings").textContent = `${fmt(0)} t/h`;
     document.getElementById("rejects").textContent = `${fmt(reject.mass)} t/h`;
     document.getElementById("cleanAsh").textContent = `${fmt(product.ash, 1)}%`;
-    document.getElementById("qualityHint").textContent = excelResults.recalculated
+    document.getElementById("qualityHint").textContent = excelResults.feedAdjusted
+      ? `已按入洗灰分 ${fmt(getFeed().ash, 1)}% 公式重算（产率不变，灰分随入料调整）`
+      : excelResults.recalculated
       ? `采用预测综合最终值，复算灰分 ${fmt(excelResults.recalculated.cleanAsh, 2)}%`
       : "采用预测综合最终表";
     document.getElementById("waterLoss").textContent = `${fmt(Math.max(0, balanceDiff))} t/h`;
@@ -1675,13 +1681,42 @@ function getFeed() {
 }
 
 function getEffectiveFeed() {
-  const feed = getFeed();
-  const q = coalQuality?.summary || {};
+  return getFeed();
+}
+
+function getBaselineFeed(coalQuality) {
+  if (coalQuality?.baselineFeed) return coalQuality.baselineFeed;
+  const summary = coalQuality?.summary || {};
+  const settings = coalQuality?.processSettings || {};
   return {
-    rate: feed.rate,
-    ash: Number.isFinite(Number(q.ash)) ? Number(q.ash) : feed.ash,
-    moisture: Number.isFinite(Number(q.moisture)) ? Number(q.moisture) : feed.moisture,
-    fineRatio: Number.isFinite(Number(q.fineRatio)) ? Number(q.fineRatio) : feed.fineRatio,
+    rate: Number(coalQuality?.expectedResults?.feedRate),
+    ash: Number(summary.ash) || Number(settings.correctedAsh),
+    moisture: Number(summary.moisture),
+    fineRatio: Number(summary.fineRatio),
+  };
+}
+
+function isFeedAshOverridden(feed, coalQuality) {
+  const baselineAsh = Number(getBaselineFeed(coalQuality).ash);
+  const feedAsh = Number(feed?.ash);
+  return Number.isFinite(baselineAsh) && Number.isFinite(feedAsh) && Math.abs(feedAsh - baselineAsh) > 0.05;
+}
+
+function applyFeedAshToCoalQuality(coalQuality, feed) {
+  if (!coalQuality) return coalQuality;
+  const baselineAsh = Number(getBaselineFeed(coalQuality).ash);
+  const feedAsh = Number(feed?.ash);
+  if (!Number.isFinite(baselineAsh) || baselineAsh <= 0 || !Number.isFinite(feedAsh)) return coalQuality;
+  const ashRatio = feedAsh / baselineAsh;
+  if (Math.abs(ashRatio - 1) < 0.001) return coalQuality;
+  const scaleAsh = (value) => (Number(value) || 0) * ashRatio;
+  return {
+    ...coalQuality,
+    baselineFeed: coalQuality.baselineFeed || getBaselineFeed(coalQuality),
+    summary: { ...coalQuality.summary, ash: feedAsh },
+    sizeFractions: (coalQuality.sizeFractions || []).map((row) => ({ ...row, ash: scaleAsh(row.ash) })),
+    denseFractions: (coalQuality.denseFractions || []).map((row) => ({ ...row, ash: scaleAsh(row.ash) })),
+    block248BB: (coalQuality.block248BB || []).map((row) => ({ ...row, ash: scaleAsh(row.ash) })),
   };
 }
 
@@ -1953,6 +1988,12 @@ function normalizeCoalQuality(raw = null) {
         ash: Number(item.ash),
       }))
       .filter((item) => item.density && Number.isFinite(item.yieldInClass)) : [],
+    baselineFeed: raw.baselineFeed && typeof raw.baselineFeed === "object" ? {
+      rate: Number(raw.baselineFeed.rate),
+      ash: Number(raw.baselineFeed.ash),
+      moisture: Number(raw.baselineFeed.moisture),
+      fineRatio: Number(raw.baselineFeed.fineRatio),
+    } : null,
   };
 }
 
@@ -2586,11 +2627,13 @@ function businessCoalSectionsToTemplate(sections, filename = "") {
   }
   if (!coalQuality?.sizeFractions?.length) return null;
 
+  const feed = buildFeedFromBusinessData(coalQuality, resultPack);
+  coalQuality.baselineFeed = { ...feed };
   const topology = defaultTopologyTemplateData();
   applyBusinessSettingsToNodes(topology.nodes, resultPack.settings);
   return {
     name: `${coalQuality.summary.seam || "煤质"}导入方案`,
-    feed: buildFeedFromBusinessData(coalQuality, resultPack),
+    feed,
     coalQuality,
     nodes: topology.nodes,
     links: topology.links,
