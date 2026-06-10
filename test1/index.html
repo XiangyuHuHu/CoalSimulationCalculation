@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>分选分配率计算</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #eef3f7;
+      --panel: #ffffff;
+      --line: #2f4658;
+      --soft-line: #c8d6e2;
+      --text: #142234;
+      --muted: #63748a;
+      --blue: #9fc5e3;
+      --yellow: #fff200;
+      --green: #2d9c6c;
+      --orange: #ef7b2d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Microsoft YaHei", Arial, sans-serif;
+      font-size: 14px;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--soft-line);
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+    }
+    h1 { margin: 0; font-size: 20px; line-height: 1.2; }
+    .hint { color: var(--muted); font-size: 13px; }
+    .tools {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    label.control {
+      display: grid;
+      grid-template-columns: auto minmax(92px, auto);
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+    }
+    select, input[type="number"] {
+      height: 34px;
+      border: 1px solid var(--soft-line);
+      border-radius: 6px;
+      padding: 0 8px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+    }
+    input[type="number"] { width: 92px; }
+    button {
+      height: 34px;
+      border: 1px solid var(--soft-line);
+      border-radius: 6px;
+      padding: 0 12px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      cursor: pointer;
+    }
+    main {
+      display: grid;
+      grid-template-columns: minmax(620px, 1.2fr) minmax(360px, 0.8fr);
+      gap: 14px;
+      padding: 14px;
+    }
+    .panel {
+      overflow: hidden;
+      border: 1px solid var(--soft-line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 8px 24px rgba(20, 43, 70, 0.08);
+    }
+    .panel-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--soft-line);
+      font-weight: 700;
+    }
+    .table-wrap { overflow: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 6px 8px;
+      text-align: center;
+      white-space: nowrap;
+    }
+    th { background: #f8fafc; font-weight: 700; }
+    .input-table { min-width: 920px; }
+    .input-table th:first-child,
+    .input-table td:first-child { width: 130px; }
+    .input-table td[contenteditable="true"] { cursor: text; }
+    .input-table td[contenteditable="true"]:focus {
+      outline: 2px solid var(--green);
+      outline-offset: -2px;
+      background: #fff;
+    }
+    .result-table {
+      max-width: 520px;
+      margin: 14px auto;
+      border: 3px solid var(--yellow);
+    }
+    .result-table th,
+    .result-table td {
+      background: var(--blue);
+      color: #f60000;
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .result-table .title-row th {
+      background: var(--blue);
+      color: #f60000;
+      font-size: 20px;
+    }
+    .result-table .sum-row td { height: 30px; }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      padding: 0 14px 14px;
+    }
+    .metric {
+      border: 1px solid var(--soft-line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #fbfdff;
+    }
+    .metric span {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .metric strong {
+      display: block;
+      font-size: 22px;
+      line-height: 1.1;
+    }
+    .formula {
+      margin: 0 14px 14px;
+      border: 1px solid var(--soft-line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #f8fafc;
+      color: var(--muted);
+      font-family: Consolas, "Microsoft YaHei", monospace;
+      line-height: 1.7;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 54px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #e8f4ef;
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    @media (max-width: 980px) {
+      header { align-items: flex-start; flex-direction: column; }
+      main { grid-template-columns: 1fr; }
+      .tools { justify-content: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>分选分配率计算</h1>
+      <div class="hint">对齐 Excel「2-3煤预测」：矸石分配率 = NORMSDIST(0.675 × (密度 - 分选密度) / Ep)，精煤分配率 = 1 - 矸石分配率。</div>
+    </div>
+    <div class="tools">
+      <label class="control">计算对象
+        <select id="modeSelect">
+          <option value="blockReject">块矸石</option>
+          <option value="blockClean">块精煤</option>
+          <option value="fineReject">末矸石</option>
+          <option value="fineClean">末精煤</option>
+        </select>
+      </label>
+      <label class="control">粒级
+        <select id="sizeSelect"></select>
+      </label>
+      <button id="resetBtn" type="button">恢复默认参数</button>
+      <a href="../test0/"><button type="button">去 test0</button></a>
+      <a href="../index.html"><button type="button">返回主流程</button></a>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <div class="panel-title">
+        <span>输入参数</span>
+        <span class="hint">可编辑每个粒级的块煤/末煤分选密度和 Ep</span>
+      </div>
+      <div class="table-wrap">
+        <table id="inputTable" class="input-table"></table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">
+        <span>输出结果</span>
+        <span id="activeHint" class="hint"></span>
+      </div>
+      <div class="table-wrap">
+        <table id="resultTable" class="result-table"></table>
+      </div>
+      <div class="summary">
+        <div class="metric"><span>当前粒级</span><strong id="metricSize">-</strong></div>
+        <div class="metric"><span>当前对象</span><strong id="metricMode">-</strong></div>
+        <div class="metric"><span>分选密度 δ</span><strong id="metricDensity">-</strong></div>
+        <div class="metric"><span>可能偏差 Ep</span><strong id="metricEp">-</strong></div>
+      </div>
+      <div id="formulaBox" class="formula"></div>
+    </section>
+  </main>
+
+  <script>
+    const densityRows = [
+      { label: "<1.30", density: 1.20 },
+      { label: "1.30-1.40", density: 1.35 },
+      { label: "1.40-1.50", density: 1.45 },
+      { label: "1.50-1.60", density: 1.55 },
+      { label: "1.60-1.70", density: 1.65 },
+      { label: "1.70-1.80", density: 1.75 },
+      { label: "1.80-2.00", density: 1.90 },
+      { label: ">2.00", density: 2.10 },
+    ];
+
+    const defaultSizes = [
+      { size: "+150", blockDensity: 1.70, blockEp: 0.02, fineDensity: 1.70, fineEp: 0.03 },
+      { size: "150-100", blockDensity: 1.70, blockEp: 0.02, fineDensity: 1.70, fineEp: 0.03 },
+      { size: "100-90", blockDensity: 1.70, blockEp: 0.02, fineDensity: 1.70, fineEp: 0.03 },
+      { size: "90-60", blockDensity: 1.70, blockEp: 0.02, fineDensity: 1.70, fineEp: 0.03 },
+      { size: "60-50", blockDensity: 1.70, blockEp: 0.02, fineDensity: 1.70, fineEp: 0.03 },
+      { size: "50-30", blockDensity: 1.70, blockEp: 0.02, fineDensity: 1.70, fineEp: 0.03 },
+      { size: "30-25", blockDensity: 1.70, blockEp: 0.02, fineDensity: 1.70, fineEp: 0.03 },
+      { size: "25-13", blockDensity: 1.70, blockEp: 0.03, fineDensity: 1.70, fineEp: 0.03 },
+      { size: "13-10", blockDensity: 1.70, blockEp: 0.03, fineDensity: 1.70, fineEp: 0.03 },
+      { size: "10-8", blockDensity: 1.70, blockEp: 0.03, fineDensity: 1.70, fineEp: 0.03 },
+      { size: "8-6", blockDensity: 1.70, blockEp: 0.04, fineDensity: 1.70, fineEp: 0.03 },
+      { size: "6-3", blockDensity: 1.70, blockEp: 0.04, fineDensity: 1.70, fineEp: 0.03 },
+      { size: "3-2", blockDensity: 1.70, blockEp: 100.00, fineDensity: 1.70, fineEp: 0.03 },
+      { size: "2-1.5", blockDensity: 1.70, blockEp: 100.00, fineDensity: 1.70, fineEp: 0.04 },
+      { size: "1.5-1", blockDensity: 1.70, blockEp: 100.00, fineDensity: 1.70, fineEp: 0.04 },
+      { size: "1-0.5", blockDensity: 1.70, blockEp: 100.00, fineDensity: 1.70, fineEp: 0.05 },
+      { size: "0.5-0.25/0.15", blockDensity: 1.70, blockEp: 100.00, fineDensity: 1.70, fineEp: 0.21 },
+      { size: "0.25/0.15-0", blockDensity: 1.70, blockEp: 100.00, fineDensity: 1.70, fineEp: 0.25 },
+    ];
+
+    let sizeSettings = structuredClone(defaultSizes);
+
+    const modeMeta = {
+      blockReject: { title: "块矸石", family: "block", product: "reject" },
+      blockClean: { title: "块精煤", family: "block", product: "clean" },
+      fineReject: { title: "末矸石", family: "fine", product: "reject" },
+      fineClean: { title: "末精煤", family: "fine", product: "clean" },
+    };
+
+    const inputTable = document.getElementById("inputTable");
+    const resultTable = document.getElementById("resultTable");
+    const modeSelect = document.getElementById("modeSelect");
+    const sizeSelect = document.getElementById("sizeSelect");
+
+    function fmt(value, digits = 2) {
+      const n = Number(value);
+      return Number.isFinite(n) ? n.toFixed(digits) : "-";
+    }
+
+    function normsdist(x) {
+      const z = Number(x);
+      if (!Number.isFinite(z)) return 0;
+      const t = 1 / (1 + 0.2316419 * Math.abs(z));
+      const d = 0.3989423 * Math.exp((-z * z) / 2);
+      const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+      return z > 0 ? 1 - p : p;
+    }
+
+    function rejectRate(density, cutDensity, ep) {
+      const epSafe = Math.max(Math.abs(Number(ep) || 0.03), 0.001);
+      return normsdist((0.675 * (Number(density) - Number(cutDensity))) / epSafe);
+    }
+
+    function rateFor(row, setting, mode) {
+      const meta = modeMeta[mode];
+      const cut = meta.family === "block" ? setting.blockDensity : setting.fineDensity;
+      const ep = meta.family === "block" ? setting.blockEp : setting.fineEp;
+      const reject = rejectRate(row.density, cut, ep);
+      return meta.product === "reject" ? reject : 1 - reject;
+    }
+
+    function activeSetting() {
+      return sizeSettings.find((item) => item.size === sizeSelect.value) || sizeSettings[0];
+    }
+
+    function renderSizeOptions() {
+      sizeSelect.innerHTML = sizeSettings.map((item) => `<option value="${item.size}">${item.size}</option>`).join("");
+    }
+
+    function renderInputTable() {
+      inputTable.innerHTML = `
+        <thead>
+          <tr>
+            <th>粒级(mm)</th>
+            <th>块煤分选密度δ</th>
+            <th>块煤Ep</th>
+            <th>末煤分选密度δ</th>
+            <th>末煤Ep</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${sizeSettings.map((item, index) => `
+            <tr>
+              <td><strong>${item.size}</strong></td>
+              <td contenteditable="true" data-index="${index}" data-field="blockDensity">${fmt(item.blockDensity, 2)}</td>
+              <td contenteditable="true" data-index="${index}" data-field="blockEp">${fmt(item.blockEp, 3)}</td>
+              <td contenteditable="true" data-index="${index}" data-field="fineDensity">${fmt(item.fineDensity, 2)}</td>
+              <td contenteditable="true" data-index="${index}" data-field="fineEp">${fmt(item.fineEp, 3)}</td>
+              <td><span class="badge">${Number(item.blockEp) >= 10 ? "不分选" : "可分选"}</span></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      `;
+    }
+
+    function renderResult() {
+      const mode = modeSelect.value;
+      const meta = modeMeta[mode];
+      const setting = activeSetting();
+      const cut = meta.family === "block" ? setting.blockDensity : setting.fineDensity;
+      const ep = meta.family === "block" ? setting.blockEp : setting.fineEp;
+      const rows = densityRows.map((row) => {
+        const rate = rateFor(row, setting, mode);
+        return { ...row, rate };
+      });
+      resultTable.innerHTML = `
+        <thead>
+          <tr class="title-row"><th colspan="3">${meta.title}</th></tr>
+          <tr><th>密度级<br>(kg/l)</th><th>密度</th><th>分配率</th></tr>
+        </thead>
+        <tbody>
+          ${rows.map((row) => `
+            <tr>
+              <td>${row.label}</td>
+              <td>${fmt(row.density, 2)}</td>
+              <td>${fmt(row.rate * 100, 0)}%</td>
+            </tr>
+          `).join("")}
+          <tr class="sum-row"><td>合计</td><td></td><td></td></tr>
+        </tbody>
+      `;
+      document.getElementById("activeHint").textContent = `${setting.size} · δ=${fmt(cut, 2)} · Ep=${fmt(ep, 3)}`;
+      document.getElementById("metricSize").textContent = setting.size;
+      document.getElementById("metricMode").textContent = meta.title;
+      document.getElementById("metricDensity").textContent = fmt(cut, 2);
+      document.getElementById("metricEp").textContent = fmt(ep, 3);
+      const example = rows[4];
+      const base = `NORMSDIST(0.675*(${fmt(example.density, 2)}-${fmt(cut, 2)})/${fmt(ep, 3)})`;
+      const reject = rejectRate(example.density, cut, ep);
+      document.getElementById("formulaBox").innerHTML = `
+        Excel 对应：<strong>${base}</strong><br>
+        ${example.label} 矸石分配率 = ${fmt(reject * 100, 2)}%；精煤分配率 = ${fmt((1 - reject) * 100, 2)}%。<br>
+        当前选择「${meta.title}」取 ${meta.product === "reject" ? "矸石分配率" : "1 - 矸石分配率"}。
+      `;
+    }
+
+    function updateInput(event) {
+      const cell = event.target.closest("[data-index]");
+      if (!cell) return;
+      const index = Number(cell.dataset.index);
+      const field = cell.dataset.field;
+      const value = Number(String(cell.textContent).trim());
+      if (!Number.isFinite(value)) return;
+      sizeSettings[index][field] = value;
+      renderResult();
+    }
+
+    function normalizeInputCell(event) {
+      const cell = event.target.closest("[data-index]");
+      if (!cell) return;
+      const field = cell.dataset.field;
+      const value = Number(String(cell.textContent).trim());
+      cell.textContent = Number.isFinite(value) ? fmt(value, field.includes("Ep") ? 3 : 2) : "";
+    }
+
+    renderSizeOptions();
+    renderInputTable();
+    renderResult();
+
+    inputTable.addEventListener("input", updateInput);
+    inputTable.addEventListener("blur", normalizeInputCell, true);
+    modeSelect.addEventListener("change", renderResult);
+    sizeSelect.addEventListener("change", renderResult);
+    document.getElementById("resetBtn").addEventListener("click", () => {
+      const currentSize = sizeSelect.value;
+      sizeSettings = structuredClone(defaultSizes);
+      renderInputTable();
+      renderSizeOptions();
+      if (sizeSettings.some((item) => item.size === currentSize)) sizeSelect.value = currentSize;
+      renderResult();
+    });
+  </script>
+</body>
+</html>
