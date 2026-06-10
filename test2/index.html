@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>块汇总测试</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #eef3f7;
+      --panel: #ffffff;
+      --line: #202020;
+      --soft-line: #cbd7e2;
+      --text: #111827;
+      --muted: #667085;
+      --yellow: #fff200;
+      --red: #f30000;
+      --blue: #d9e8f5;
+      --green: #237a57;
+      --orange: #ef7b2d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Microsoft YaHei", Arial, sans-serif;
+      font-size: 14px;
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--soft-line);
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+    }
+    h1 { margin: 0; font-size: 20px; line-height: 1.2; }
+    .hint { color: var(--muted); font-size: 13px; }
+    .tools {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    label.control {
+      display: grid;
+      grid-template-columns: auto 86px;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+    }
+    input[type="number"] {
+      width: 86px;
+      height: 34px;
+      border: 1px solid var(--soft-line);
+      border-radius: 6px;
+      padding: 0 8px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+    }
+    button {
+      height: 34px;
+      border: 1px solid var(--soft-line);
+      border-radius: 6px;
+      padding: 0 12px;
+      background: #fff;
+      color: var(--text);
+      font: inherit;
+      cursor: pointer;
+    }
+    main {
+      display: grid;
+      grid-template-columns: minmax(720px, 1.4fr) minmax(340px, 0.6fr);
+      gap: 14px;
+      padding: 14px;
+    }
+    .panel {
+      overflow: hidden;
+      border: 1px solid var(--soft-line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 8px 24px rgba(20, 43, 70, 0.08);
+    }
+    .panel-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--soft-line);
+      font-weight: 700;
+    }
+    .table-wrap { overflow: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 5px 7px;
+      text-align: center;
+      white-space: nowrap;
+    }
+    th { background: #fff; font-weight: 700; }
+    .calc-table { min-width: 780px; }
+    .title-row th {
+      background: #fff;
+      font-size: 18px;
+    }
+    .param-row th {
+      background: #fff;
+      color: var(--red);
+      font-size: 17px;
+    }
+    .section-row th {
+      background: #f9fafb;
+      font-size: 17px;
+    }
+    .left-head {
+      color: var(--red);
+      font-size: 16px;
+    }
+    .ep-cell,
+    .editable {
+      color: var(--red);
+    }
+    .editable {
+      cursor: text;
+    }
+    .editable:focus {
+      outline: 2px solid var(--green);
+      outline-offset: -2px;
+      background: #fff;
+    }
+    .sum-row td {
+      font-weight: 700;
+      font-size: 17px;
+    }
+    .mirror-row td {
+      color: #344054;
+      border-color: #d0d5dd;
+      font-size: 16px;
+    }
+    .combined-row td {
+      color: #344054;
+      border-color: #d0d5dd;
+      font-size: 16px;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      padding: 14px;
+    }
+    .metric {
+      border: 1px solid var(--soft-line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fbfdff;
+    }
+    .metric span {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .metric strong {
+      display: block;
+      font-size: 22px;
+      line-height: 1.1;
+    }
+    .formula {
+      margin: 0 14px 14px;
+      border: 1px solid var(--soft-line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #f8fafc;
+      color: var(--muted);
+      font-family: Consolas, "Microsoft YaHei", monospace;
+      line-height: 1.7;
+    }
+    .check {
+      margin: 0 14px 14px;
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #ecfdf3;
+      color: var(--green);
+      font-weight: 700;
+    }
+    @media (max-width: 980px) {
+      header { align-items: flex-start; flex-direction: column; }
+      main { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>块汇总测试</h1>
+      <div class="hint">对齐 Excel「2-3煤预测」块煤浅槽分选汇总：L351/M351/N351/O351 以及 BF180/BG180。</div>
+    </div>
+    <div class="tools">
+      <label class="control">分选密度δ<input id="densityInput" type="number" step="0.01" value="1.70"></label>
+      <label class="control">脱介粒度mm<input id="cutSizeInput" type="number" step="0.1" value="1.0"></label>
+      <label class="control">脱介效率<input id="effInput" type="number" step="1" value="100"></label>
+      <button id="resetBtn" type="button">恢复 Excel 默认</button>
+      <button id="exportCsvBtn" type="button">导出CSV</button>
+      <a href="../test1/"><button type="button">去 test1</button></a>
+      <a href="../index.html"><button type="button">返回主流程</button></a>
+    </div>
+  </header>
+
+  <main>
+    <section class="panel">
+      <div class="panel-title">
+        <span>块煤浅槽分选</span>
+        <span class="hint">红色列和产品数据可手填；底部自动汇总</span>
+      </div>
+      <div class="table-wrap">
+        <table id="calcTable" class="calc-table"></table>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title">
+        <span>总计结果</span>
+        <span class="hint">SUM / SUMPRODUCT</span>
+      </div>
+      <div class="cards">
+        <div class="metric"><span>块精煤占全样</span><strong id="cleanYield">-</strong></div>
+        <div class="metric"><span>块精煤灰分</span><strong id="cleanAsh">-</strong></div>
+        <div class="metric"><span>块矸石占全样</span><strong id="rejectYield">-</strong></div>
+        <div class="metric"><span>块矸石灰分</span><strong id="rejectAsh">-</strong></div>
+        <div class="metric"><span>块煤合计占全样</span><strong id="totalYield">-</strong></div>
+        <div class="metric"><span>块煤合计灰分</span><strong id="totalAsh">-</strong></div>
+      </div>
+      <div id="formulaBox" class="formula"></div>
+      <div id="checkBox" class="check"></div>
+    </section>
+  </main>
+
+  <script>
+    const defaultRows = [
+      { size: "+150", ep: 0.02, cleanYield: 3.21818518357327, cleanAsh: 7.17802080484315, rejectYield: 1.41150964151594, rejectAsh: 82.8961125017188 },
+      { size: "150-100", ep: 0.02, cleanYield: 2.53617900647549, cleanAsh: 7.9944119366836, rejectYield: 0.80661553627821, rejectAsh: 86.5200931330076 },
+      { size: "100-90", ep: 0.02, cleanYield: 0.990467348088316, cleanAsh: 7.9944119366836, rejectYield: 0.315011814664681, rejectAsh: 86.5200931330076 },
+      { size: "90-60", ep: 0.02, cleanYield: 3.66907523024917, cleanAsh: 7.9944119366836, rejectYield: 1.16692594526495, rejectAsh: 86.5200931330077 },
+      { size: "60-50", ep: 0.02, cleanYield: 1.57883832457014, cleanAsh: 7.9944119366836, rejectYield: 0.502139446237087, rejectAsh: 86.5200931330076 },
+      { size: "50-30", ep: 0.02, cleanYield: 4.27787953066838, cleanAsh: 9.79267618332425, rejectYield: 4.27052544359722, rejectAsh: 86.0851609952724 },
+      { size: "30-25", ep: 0.02, cleanYield: 1.40652910857412, cleanAsh: 9.79267618332425, rejectYield: 1.40411114952258, rejectAsh: 86.0851609952724 },
+      { size: "25-13", ep: 0.03, cleanYield: 5.94511463271262, cleanAsh: 8.87204329695036, rejectYield: 3.50108868604916, rejectAsh: 84.0982654452307 },
+      { size: "13-10", ep: 0.03, cleanYield: 2.88165993302456, cleanAsh: 8.79982395867673, rejectYield: 1.72577635451064, rejectAsh: 84.7138375324112 },
+      { size: "10-8", ep: 0.03, cleanYield: 0.286886069059467, cleanAsh: 8.7384802368353, rejectYield: 0.159949054219756, rejectAsh: 84.9812079726105 },
+      { size: "8-6", ep: 0.04, cleanYield: 0.299520664293026, cleanAsh: 8.84085656047413, rejectYield: 0.163826774324557, rejectAsh: 84.7715471786701 },
+      { size: "6-3", ep: 0.04, cleanYield: 0.65697994670022, cleanAsh: 8.81602016242978, rejectYield: 0.344667159779967, rejectAsh: 85.3490122578588 },
+      { size: "3-2", ep: 100, cleanYield: 0, cleanAsh: 0, rejectYield: 0, rejectAsh: 0 },
+      { size: "2-1.5", ep: 100, cleanYield: 0, cleanAsh: 0, rejectYield: 0, rejectAsh: 0 },
+      { size: "1.5-1", ep: 100, cleanYield: 0, cleanAsh: 0, rejectYield: 0, rejectAsh: 0 },
+      { size: "1-0.5", ep: 100, cleanYield: 0, cleanAsh: 0, rejectYield: 0, rejectAsh: 0 },
+      { size: "0.5-0", ep: 100, cleanYield: 0, cleanAsh: 0, rejectYield: 0, rejectAsh: 0 },
+      { size: "小计", ep: 0, cleanYield: 0, cleanAsh: 0, rejectYield: 0, rejectAsh: 0 },
+      { size: "0.5-0.25/0.15", ep: 100, cleanYield: 0, cleanAsh: 0, rejectYield: 0, rejectAsh: 0 },
+      { size: "0.25/0.15-0", ep: 100, cleanYield: 0, cleanAsh: 0, rejectYield: 0, rejectAsh: 0 },
+    ];
+
+    let rows = structuredClone(defaultRows);
+
+    const expected = {
+      cleanYield: 27.7473149779888,
+      cleanAsh: 8.57609287399479,
+      rejectYield: 15.7721470059647,
+      rejectAsh: 85.2446911772743,
+      totalYield: 43.5194619839535,
+      totalAsh: 36.3620154946938,
+    };
+
+    function fmt(value, digits = 3) {
+      const n = Number(value);
+      return Number.isFinite(n) ? n.toFixed(digits) : "-";
+    }
+
+    function sum(field) {
+      return rows.reduce((total, row) => total + (Number(row[field]) || 0), 0);
+    }
+
+    function weightedAsh(yieldField, ashField) {
+      const y = sum(yieldField);
+      if (y <= 0) return 0;
+      return rows.reduce((total, row) => total + (Number(row[yieldField]) || 0) * (Number(row[ashField]) || 0), 0) / y;
+    }
+
+    function calculate() {
+      const cleanYield = sum("cleanYield");
+      const cleanAsh = weightedAsh("cleanYield", "cleanAsh");
+      const rejectYield = sum("rejectYield");
+      const rejectAsh = weightedAsh("rejectYield", "rejectAsh");
+      const totalYield = cleanYield + rejectYield;
+      const totalAsh = totalYield > 0
+        ? (cleanYield * cleanAsh + rejectYield * rejectAsh) / totalYield
+        : 0;
+      return { cleanYield, cleanAsh, rejectYield, rejectAsh, totalYield, totalAsh };
+    }
+
+    function renderTable() {
+      const calc = calculate();
+      document.getElementById("calcTable").innerHTML = `
+        <thead>
+          <tr class="title-row"><th colspan="5">块煤浅槽分选</th></tr>
+          <tr class="param-row">
+            <th>分选密度 δ</th>
+            <th>${fmt(document.getElementById("densityInput").value, 2)}</th>
+            <th>脱介粒度mm</th>
+            <th>${fmt(document.getElementById("cutSizeInput").value, 1)}</th>
+            <th>${fmt(document.getElementById("effInput").value, 0)}%</th>
+          </tr>
+          <tr class="section-row">
+            <th rowspan="2" class="left-head">可能偏差Ep</th>
+            <th colspan="2">块精煤</th>
+            <th colspan="2">块矸石</th>
+          </tr>
+          <tr>
+            <th>占全样<br>(%)</th>
+            <th>灰分<br>(%)</th>
+            <th>占全样<br>(%)</th>
+            <th>灰分<br>(%)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((row, index) => `
+            <tr>
+              <td class="editable ep-cell" contenteditable="true" data-index="${index}" data-field="ep">${fmt(row.ep, 2)}</td>
+              <td class="editable" contenteditable="true" data-index="${index}" data-field="cleanYield">${fmt(row.cleanYield, 2)}</td>
+              <td class="editable" contenteditable="true" data-index="${index}" data-field="cleanAsh">${fmt(row.cleanAsh, 2)}</td>
+              <td class="editable" contenteditable="true" data-index="${index}" data-field="rejectYield">${fmt(row.rejectYield, 2)}</td>
+              <td class="editable" contenteditable="true" data-index="${index}" data-field="rejectAsh">${fmt(row.rejectAsh, 2)}</td>
+            </tr>
+          `).join("")}
+          <tr class="sum-row">
+            <td></td>
+            <td>${fmt(calc.cleanYield, 3)}</td>
+            <td>${fmt(calc.cleanAsh, 3)}</td>
+            <td>${fmt(calc.rejectYield, 3)}</td>
+            <td>${fmt(calc.rejectAsh, 3)}</td>
+          </tr>
+          <tr class="mirror-row">
+            <td></td>
+            <td>${fmt(calc.cleanYield, 3)}</td>
+            <td>${fmt(calc.cleanAsh, 3)}</td>
+            <td>${fmt(calc.rejectYield, 3)}</td>
+            <td>${fmt(calc.rejectAsh, 3)}</td>
+          </tr>
+          <tr class="combined-row">
+            <td></td><td></td><td></td>
+            <td>${fmt(calc.totalYield, 3)}</td>
+            <td>${fmt(calc.totalAsh, 3)}</td>
+          </tr>
+        </tbody>
+      `;
+    }
+
+    function renderSummary() {
+      const calc = calculate();
+      document.getElementById("cleanYield").textContent = fmt(calc.cleanYield, 3);
+      document.getElementById("cleanAsh").textContent = fmt(calc.cleanAsh, 3);
+      document.getElementById("rejectYield").textContent = fmt(calc.rejectYield, 3);
+      document.getElementById("rejectAsh").textContent = fmt(calc.rejectAsh, 3);
+      document.getElementById("totalYield").textContent = fmt(calc.totalYield, 3);
+      document.getElementById("totalAsh").textContent = fmt(calc.totalAsh, 3);
+      document.getElementById("formulaBox").innerHTML = `
+        L351 = SUM(L331:L350) = ${fmt(calc.cleanYield, 3)}<br>
+        M351 = SUMPRODUCT(M331:M350, L331:L350) / L351 = ${fmt(calc.cleanAsh, 3)}<br>
+        N351 = SUM(N331:N350) = ${fmt(calc.rejectYield, 3)}<br>
+        O351 = SUMPRODUCT(O331:O350, N331:N350) / N351 = ${fmt(calc.rejectAsh, 3)}<br>
+        BF180 = L351 + N351 = ${fmt(calc.totalYield, 3)}；BG180 = SUMPRODUCT(产率, 灰分) / BF180 = ${fmt(calc.totalAsh, 3)}
+      `;
+      const maxDelta = Math.max(
+        Math.abs(calc.cleanYield - expected.cleanYield),
+        Math.abs(calc.cleanAsh - expected.cleanAsh),
+        Math.abs(calc.rejectYield - expected.rejectYield),
+        Math.abs(calc.rejectAsh - expected.rejectAsh),
+        Math.abs(calc.totalYield - expected.totalYield),
+        Math.abs(calc.totalAsh - expected.totalAsh),
+      );
+      document.getElementById("checkBox").textContent = maxDelta < 0.001
+        ? "默认值已对齐 Excel 缓存结果。"
+        : `当前手填数据已变化；与 Excel 默认最大偏差 ${fmt(maxDelta, 3)}。`;
+    }
+
+    function render() {
+      renderTable();
+      renderSummary();
+    }
+
+    function updateCell(event) {
+      const cell = event.target.closest("[data-index]");
+      if (!cell) return;
+      const index = Number(cell.dataset.index);
+      const field = cell.dataset.field;
+      const value = Number(String(cell.textContent).trim());
+      if (!Number.isFinite(value)) return;
+      rows[index][field] = value;
+      renderSummary();
+    }
+
+    function normalizeCell(event) {
+      const cell = event.target.closest("[data-index]");
+      if (!cell) return;
+      const index = Number(cell.dataset.index);
+      const field = cell.dataset.field;
+      const value = Number(String(cell.textContent).trim());
+      if (Number.isFinite(value)) rows[index][field] = value;
+      cell.textContent = Number.isFinite(value) ? fmt(value, field === "ep" ? 2 : 2) : "";
+      render();
+    }
+
+    function csvEscape(value) {
+      const text = String(value ?? "");
+      return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    }
+
+    function exportCsv() {
+      const calc = calculate();
+      const lines = [
+        ["粒级", "可能偏差Ep", "块精煤占全样", "块精煤灰分", "块矸石占全样", "块矸石灰分"],
+        ...rows.map((row) => [row.size, row.ep, row.cleanYield, row.cleanAsh, row.rejectYield, row.rejectAsh]),
+        ["总计", "", calc.cleanYield, calc.cleanAsh, calc.rejectYield, calc.rejectAsh],
+        ["块煤合计", "", "", "", calc.totalYield, calc.totalAsh],
+      ];
+      const content = "\ufeff" + lines.map((line) => line.map(csvEscape).join(",")).join("\n");
+      const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "块煤浅槽汇总测试.csv";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    document.getElementById("calcTable").addEventListener("input", updateCell);
+    document.getElementById("calcTable").addEventListener("blur", normalizeCell, true);
+    ["densityInput", "cutSizeInput", "effInput"].forEach((id) => {
+      document.getElementById(id).addEventListener("input", render);
+    });
+    document.getElementById("resetBtn").addEventListener("click", () => {
+      rows = structuredClone(defaultRows);
+      document.getElementById("densityInput").value = "1.70";
+      document.getElementById("cutSizeInput").value = "1.0";
+      document.getElementById("effInput").value = "100";
+      render();
+    });
+    document.getElementById("exportCsvBtn").addEventListener("click", exportCsv);
+
+    render();
+  </script>
+</body>
+</html>
