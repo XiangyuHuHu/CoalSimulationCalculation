@@ -340,16 +340,21 @@
       const meta = modeMeta[modeSelect.value];
       const params = activeParams();
       const group = activeGroup();
+      const rawYieldTotal = group.rows.reduce((sum, row) => sum + (Number(row.yield) || 0), 0);
+      const sizeYieldTotal = group.rows.reduce((sum, row) => sum + (Number(row.sizeYield) || 0), 0);
       return densityRows.map((densityRow, index) => {
-        const raw = group.rows[index] || { ash: 0, yield: 0 };
+        const raw = group.rows[index] || { sizeYield: 0, ash: 0, yield: 0 };
+        const effectiveRawYield = sizeYieldTotal > 0
+          ? rawYieldTotal * ((Number(raw.sizeYield) || 0) / sizeYieldTotal)
+          : Number(raw.yield) || 0;
         const reject = rejectRate(densityRow.density, params.density, params.ep);
         const rate = meta.product === "reject" ? reject : 1 - reject;
-        const productYield = (Number(raw.yield) || 0) * rate;
+        const productYield = effectiveRawYield * rate;
         return {
           ...densityRow,
           rate,
           ash: Number(raw.ash) || 0,
-          rawYield: Number(raw.yield) || 0,
+          rawYield: effectiveRawYield,
           productYield,
         };
       });
