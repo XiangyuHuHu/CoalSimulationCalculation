@@ -406,7 +406,7 @@
                   const groupTotal = groupRawYieldTotal(group);
                   const sizeYield = groupTotal > 0 ? ((Number(row.yield) || 0) / groupTotal) * 100 : 0;
                   return `
-                    <td>${fmt(sizeYield, 2)}</td>
+                    <td contenteditable="true" data-group="${groupIndex}" data-row="${index}" data-field="sizeYield">${fmt(sizeYield, 2)}</td>
                     <td contenteditable="true" data-group="${groupIndex}" data-row="${index}" data-field="ash">${fmt(row.ash, 2)}</td>
                     <td contenteditable="true" data-group="${groupIndex}" data-row="${index}" data-field="yield">${fmt(row.yield, 3)}</td>
                   `;
@@ -477,6 +477,31 @@
       renderResult();
     }
 
+    function setInputCellValue(groupIndex, rowIndex, field, value) {
+      if (!Number.isFinite(value)) return;
+      const group = sizeData[groupIndex];
+      if (!group || !group.rows[rowIndex]) return;
+      if (field === "sizeYield") {
+        const groupTotal = groupRawYieldTotal(group);
+        if (groupTotal <= 0) {
+          group.rows[rowIndex].yield = 0;
+          return;
+        }
+        const targetYield = (value / 100) * groupTotal;
+        const currentYield = Number(group.rows[rowIndex].yield) || 0;
+        const otherTotal = groupTotal - currentYield;
+        const remainingYield = Math.max(groupTotal - targetYield, 0);
+        group.rows.forEach((row, index) => {
+          if (index === rowIndex) return;
+          const originalYield = Number(row.yield) || 0;
+          row.yield = otherTotal > 0 ? originalYield * (remainingYield / otherTotal) : 0;
+        });
+        group.rows[rowIndex].yield = targetYield;
+        return;
+      }
+      group.rows[rowIndex][field] = value;
+    }
+
     function updateCell(event) {
       const paramCell = event.target.closest("[data-param-group]");
       if (paramCell) {
@@ -495,8 +520,7 @@
       const rowIndex = Number(cell.dataset.row);
       const field = cell.dataset.field;
       const value = Number(String(cell.textContent).trim());
-      if (!Number.isFinite(value)) return;
-      sizeData[groupIndex].rows[rowIndex][field] = value;
+      setInputCellValue(groupIndex, rowIndex, field, value);
       renderResult();
     }
 
@@ -515,8 +539,13 @@
       }
       const cell = event.target.closest("[data-group]");
       if (!cell) return;
+      const groupIndex = Number(cell.dataset.group);
+      const rowIndex = Number(cell.dataset.row);
       const value = Number(String(cell.textContent).trim());
-      if (Number.isFinite(value)) cell.textContent = fmt(value, cell.dataset.field === "yield" ? 3 : 2);
+      if (Number.isFinite(value)) {
+        setInputCellValue(groupIndex, rowIndex, cell.dataset.field, value);
+      }
+      renderInput();
       renderResult();
     }
 
