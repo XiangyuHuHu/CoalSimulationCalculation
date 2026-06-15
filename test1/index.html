@@ -135,7 +135,12 @@
       font-size: 20px;
       line-height: 1.1;
     }
-    .input-table { min-width: 600px; }
+    .input-table { min-width: 2400px; }
+    .input-table th:first-child,
+    .input-table td:first-child { width: 112px; }
+    .input-table th:nth-child(2),
+    .input-table td:nth-child(2) { width: 76px; }
+    .input-table .size-head { background: var(--head); }
     .input-table td[contenteditable="true"] { cursor: text; }
     .input-table td[contenteditable="true"]:focus,
     .result-table td[contenteditable="true"]:focus {
@@ -145,7 +150,7 @@
     }
     .input-table .density-col { color: var(--red); font-weight: 700; }
     .result-table {
-      max-width: 520px;
+      max-width: 760px;
       margin: 14px auto;
       border: 3px solid var(--yellow);
     }
@@ -335,20 +340,30 @@
     }
 
     function renderInput() {
-      const group = activeGroup();
       inputTable.innerHTML = `
         <thead>
-          <tr><th>密度级(kg/l)</th><th>密度</th><th>灰分(%)</th><th>原占全样(%)</th></tr>
+          <tr>
+            <th rowspan="2">密度级(kg/l)</th>
+            <th rowspan="2">密度</th>
+            ${sizeData.map((group) => `<th class="size-head" colspan="2">${group.size}</th>`).join("")}
+          </tr>
+          <tr>
+            ${sizeData.map(() => `<th>灰分(%)</th><th>原占全样(%)</th>`).join("")}
+          </tr>
         </thead>
         <tbody>
           ${densityRows.map((density, index) => {
-            const row = group.rows[index] || { ash: 0, yield: 0 };
             return `
               <tr>
                 <td class="density-col">${density.label}</td>
                 <td class="density-col">${fmt(density.density, 2)}</td>
-                <td contenteditable="true" data-row="${index}" data-field="ash">${fmt(row.ash, 2)}</td>
-                <td contenteditable="true" data-row="${index}" data-field="yield">${fmt(row.yield, 3)}</td>
+                ${sizeData.map((group, groupIndex) => {
+                  const row = group.rows[index] || { ash: 0, yield: 0 };
+                  return `
+                    <td contenteditable="true" data-group="${groupIndex}" data-row="${index}" data-field="ash">${fmt(row.ash, 2)}</td>
+                    <td contenteditable="true" data-group="${groupIndex}" data-row="${index}" data-field="yield">${fmt(row.yield, 3)}</td>
+                  `;
+                }).join("")}
               </tr>
             `;
           }).join("")}
@@ -364,18 +379,20 @@
       const total = summary(rows);
       resultTable.innerHTML = `
         <thead>
-          <tr class="size-title"><th colspan="3">${group.size}</th></tr>
-          <tr><th>分配率</th><th>灰分<br>(%)</th><th>占全样<br>(%)</th></tr>
+          <tr class="size-title"><th colspan="5">${group.size}</th></tr>
+          <tr><th>密度级</th><th>密度</th><th>分配率</th><th>灰分<br>(%)</th><th>占全样<br>(%)</th></tr>
         </thead>
         <tbody>
           ${rows.map((row) => `
             <tr>
+              <td>${row.label}</td>
+              <td>${fmt(row.density, 2)}</td>
               <td class="rate-col">${fmt(row.rate * 100, 0)}%</td>
               <td>${fmt(row.ash, 2)}</td>
               <td>${fmt(row.productYield, 2)}</td>
             </tr>
           `).join("")}
-          <tr class="sum-row"><td></td><td>${fmt(total.ash, 2)}</td><td class="sum-yield">${fmt(total.totalYield, 2)}</td></tr>
+          <tr class="sum-row"><td>合计</td><td></td><td></td><td>${fmt(total.ash, 2)}</td><td class="sum-yield">${fmt(total.totalYield, 2)}</td></tr>
         </tbody>
       `;
       document.getElementById("activeHint").textContent = `${meta.title} · δ=${fmt(params.density, 2)} · Ep=${fmt(params.ep, 3)}`;
@@ -394,18 +411,19 @@
     }
 
     function updateCell(event) {
-      const cell = event.target.closest("[data-row]");
+      const cell = event.target.closest("[data-group]");
       if (!cell) return;
+      const groupIndex = Number(cell.dataset.group);
       const rowIndex = Number(cell.dataset.row);
       const field = cell.dataset.field;
       const value = Number(String(cell.textContent).trim());
       if (!Number.isFinite(value)) return;
-      activeGroup().rows[rowIndex][field] = value;
+      sizeData[groupIndex].rows[rowIndex][field] = value;
       renderResult();
     }
 
     function normalizeCell(event) {
-      const cell = event.target.closest("[data-row]");
+      const cell = event.target.closest("[data-group]");
       if (!cell) return;
       const value = Number(String(cell.textContent).trim());
       if (Number.isFinite(value)) cell.textContent = fmt(value, cell.dataset.field === "yield" ? 3 : 2);
