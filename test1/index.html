@@ -218,10 +218,8 @@
         <span class="hint">密度、Ep、灰分、原占全样都可以修改</span>
       </div>
       <div class="param-grid">
-        <label class="param-card"><span>块煤分选密度 δ</span><input id="blockDensityInput" type="number" step="0.01" value="1.70"></label>
-        <label class="param-card"><span>块煤可能偏差 Ep</span><input id="blockEpInput" type="number" step="0.001" value="0.020"></label>
-        <label class="param-card"><span>末煤分选密度 δ</span><input id="fineDensityInput" type="number" step="0.01" value="1.70"></label>
-        <label class="param-card"><span>末煤可能偏差 Ep</span><input id="fineEpInput" type="number" step="0.001" value="0.030"></label>
+        <label class="param-card"><span>分选密度 δ</span><input id="cutDensityInput" type="number" step="0.01" value="1.70"></label>
+        <label class="param-card"><span>可能偏差 Ep</span><input id="epInput" type="number" step="0.001" value="0.020"></label>
       </div>
       <div class="table-wrap">
         <table id="inputTable" class="input-table"></table>
@@ -255,30 +253,30 @@
     const defaultSizeData = [{"size":"+150","rows":[{"ash":6.47,"yield":1.72585199613119},{"ash":7.71,"yield":1.48397122394614},{"ash":0,"yield":0},{"ash":0,"yield":0},{"ash":0,"yield":0},{"ash":58.9,"yield":0.182760677455922},{"ash":71.02,"yield":0.252397327497447},{"ash":90.19,"yield":0.98471360005851}]},{"size":"150-100","rows":[{"ash":5.02,"yield":1.03181205474486},{"ash":8.63,"yield":1.3810731516903},{"ash":17.81,"yield":0.0775745753014504},{"ash":27.52,"yield":0.00754684782344427},{"ash":41.43,"yield":0.0394893200063944},{"ash":53.94,"yield":0.0107059934239558},{"ash":69.44,"yield":0.00930192871261735},{"ash":87.25,"yield":0.785290671050681}]},{"size":"100-90","rows":[{"ash":5.02,"yield":0.402958997365461},{"ash":8.63,"yield":0.53935777347658},{"ash":17.81,"yield":0.030295607558349},{"ash":27.52,"yield":0.00294731023757694},{"ash":41.43,"yield":0.0154219721733677},{"ash":53.94,"yield":0.00418106801144636},{"ash":69.44,"yield":0.00363273122305995},{"ash":87.25,"yield":0.306683702707157}]},{"size":"90-60","rows":[{"ash":5.02,"yield":1.49271642209433},{"ash":8.63,"yield":1.99799039385275},{"ash":17.81,"yield":0.112226681164432},{"ash":27.52,"yield":0.0109179802942773},{"ash":41.43,"yield":0.0571289666561022},{"ash":53.94,"yield":0.0154882976267655},{"ash":69.44,"yield":0.013457045478993},{"ash":87.25,"yield":1.13607538834647}]},{"size":"60-50","rows":[{"ash":5.02,"yield":0.642330218657766},{"ash":8.63,"yield":0.85975446344922},{"ash":17.81,"yield":0.0482922191948857},{"ash":27.52,"yield":0.00469811182212688},{"ash":41.43,"yield":0.0245831432553151},{"ash":53.94,"yield":0.00666476328255209},{"ash":69.44,"yield":0.00579069596680756},{"ash":87.25,"yield":0.488864155178549}]},{"size":"50-30","rows":[{"ash":4.1,"yield":1.48908984906901},{"ash":8.99,"yield":2.15399940547651},{"ash":16.97,"yield":0.37309627642029},{"ash":29.19,"yield":0.118629238037462},{"ash":46.14,"yield":0.144991290934676},{"ash":51.86,"yield":0.102885234223849},{"ash":61.16,"yield":0.248242664782097},{"ash":88.59,"yield":3.91747101532171}]},{"size":"30-25","rows":[{"ash":4.1,"yield":0.489599625932093},{"ash":8.99,"yield":0.708216031315098},{"ash":16.97,"yield":0.122670769320089},{"ash":29.19,"yield":0.0390042485374965},{"ash":46.14,"yield":0.0476718593236068},{"ash":51.86,"yield":0.0338277587624584},{"ash":61.16,"yield":0.0816200015692056},{"ash":88.59,"yield":1.28802996333665}]},{"size":"25-13","rows":[{"ash":3.77,"yield":1.95698225831209},{"ash":8.44,"yield":3.15404367427132},{"ash":17.14,"yield":0.621199762493258},{"ash":31.2,"yield":0.0947363472211941},{"ash":42.7,"yield":0.119773810415367},{"ash":49.74,"yield":0.107593422915499},{"ash":60.83,"yield":0.232104050691925},{"ash":87.03,"yield":3.15976999244112}]},{"size":"13-10","rows":[{"ash":3.91,"yield":1.00037123655824},{"ash":8.85,"yield":1.5344469824432},{"ash":16.86,"yield":0.257238317972118},{"ash":33.77,"yield":0.0359317015580101},{"ash":42.11,"yield":0.0538975523370152},{"ash":50.35,"yield":0.0522642931752875},{"ash":56.92,"yield":0.0620638481456538},{"ash":86.94,"yield":1.61122235534567}]},{"size":"10-8","rows":[{"ash":4.19,"yield":0.117466799950935},{"ash":9.31,"yield":0.142008190870052},{"ash":18.3,"yield":0.0189518926314891},{"ash":35.73,"yield":0.00358077234051177},{"ash":44.02,"yield":0.00515281873390717},{"ash":51.92,"yield":0.00305675687604663},{"ash":60.23,"yield":0.00637552148432582},{"ash":86.8,"yield":0.150242370391955}]},{"size":"8-6","rows":[{"ash":4.19,"yield":0.117873555012514},{"ash":9.32,"yield":0.150327303410567},{"ash":18.29,"yield":0.0233050656152193},{"ash":34.5,"yield":0.00327426541701427},{"ash":43.54,"yield":0.00471879427746175},{"ash":50.95,"yield":0.00491139812552141},{"ash":59.23,"yield":0.00587441736581973},{"ash":86.88,"yield":0.153062639393466}]},{"size":"6-3","rows":[{"ash":4.17,"yield":0.258822732649945},{"ash":9.23,"yield":0.324724208725085},{"ash":17.81,"yield":0.0523491563983976},{"ash":32.48,"yield":0.01275512440164},{"ash":43.05,"yield":0.00850341626776001},{"ash":48.98,"yield":0.00797195275102501},{"ash":58.39,"yield":0.0119579291265375},{"ash":87.29,"yield":0.324562586159796}]},{"size":"3-2","rows":[{"ash":4.09,"yield":0},{"ash":7.67,"yield":0},{"ash":14.89,"yield":0},{"ash":27.2,"yield":0},{"ash":37.77,"yield":0},{"ash":43.96,"yield":0},{"ash":52.2,"yield":0},{"ash":86.63,"yield":0}]},{"size":"2-1.5","rows":[{"ash":4.09,"yield":0},{"ash":7.67,"yield":0},{"ash":14.89,"yield":0},{"ash":27.2,"yield":0},{"ash":37.77,"yield":0},{"ash":43.96,"yield":0},{"ash":52.2,"yield":0},{"ash":86.63,"yield":0}]},{"size":"1.5-1","rows":[{"ash":4.21,"yield":0},{"ash":7.5,"yield":0},{"ash":13.02,"yield":0},{"ash":23.89,"yield":0},{"ash":34.28,"yield":0},{"ash":41.56,"yield":0},{"ash":71.88,"yield":0},{"ash":86.39,"yield":0}]},{"size":"1-0.5","rows":[{"ash":4.41,"yield":0},{"ash":6.79,"yield":0},{"ash":10.46,"yield":0},{"ash":18.27,"yield":0},{"ash":35.28,"yield":0},{"ash":51.09,"yield":0},{"ash":74.6,"yield":0},{"ash":86.92,"yield":0}]},{"size":"0.5-0.25/0.15","rows":[{"ash":4.68,"yield":0},{"ash":5.89,"yield":0},{"ash":9.15,"yield":0},{"ash":14.64,"yield":0},{"ash":37.63,"yield":0},{"ash":62.02,"yield":0},{"ash":77.17,"yield":0},{"ash":85.19,"yield":0}]},{"size":"0.25/0.15-0","rows":[{"ash":5.05,"yield":0},{"ash":5.37,"yield":0},{"ash":9.92,"yield":0},{"ash":17.76,"yield":0},{"ash":40.82,"yield":0},{"ash":62.18,"yield":0},{"ash":75.25,"yield":0},{"ash":90.19,"yield":0}]}];
 
     const defaultSizeSettings = {
-      "+150": { blockDensity: 1.70, blockEp: 0.02, fineDensity: 1.70, fineEp: 0.03 },
-      "150-100": { blockDensity: 1.70, blockEp: 0.02, fineDensity: 1.70, fineEp: 0.03 },
-      "100-90": { blockDensity: 1.70, blockEp: 0.02, fineDensity: 1.70, fineEp: 0.03 },
-      "90-60": { blockDensity: 1.70, blockEp: 0.02, fineDensity: 1.70, fineEp: 0.03 },
-      "60-50": { blockDensity: 1.70, blockEp: 0.02, fineDensity: 1.70, fineEp: 0.03 },
-      "50-30": { blockDensity: 1.70, blockEp: 0.02, fineDensity: 1.70, fineEp: 0.03 },
-      "30-25": { blockDensity: 1.70, blockEp: 0.02, fineDensity: 1.70, fineEp: 0.03 },
-      "25-13": { blockDensity: 1.70, blockEp: 0.03, fineDensity: 1.70, fineEp: 0.03 },
-      "13-10": { blockDensity: 1.70, blockEp: 0.03, fineDensity: 1.70, fineEp: 0.03 },
-      "10-8": { blockDensity: 1.70, blockEp: 0.03, fineDensity: 1.70, fineEp: 0.03 },
-      "8-6": { blockDensity: 1.70, blockEp: 0.04, fineDensity: 1.70, fineEp: 0.03 },
-      "6-3": { blockDensity: 1.70, blockEp: 0.04, fineDensity: 1.70, fineEp: 0.03 },
-      "3-2": { blockDensity: 1.70, blockEp: 100.00, fineDensity: 1.70, fineEp: 0.03 },
-      "2-1.5": { blockDensity: 1.70, blockEp: 100.00, fineDensity: 1.70, fineEp: 0.04 },
-      "1.5-1": { blockDensity: 1.70, blockEp: 100.00, fineDensity: 1.70, fineEp: 0.04 },
-      "1-0.5": { blockDensity: 1.70, blockEp: 100.00, fineDensity: 1.70, fineEp: 0.05 },
-      "0.5-0.25/0.15": { blockDensity: 1.70, blockEp: 100.00, fineDensity: 1.70, fineEp: 0.21 },
-      "0.25/0.15-0": { blockDensity: 1.70, blockEp: 100.00, fineDensity: 1.70, fineEp: 0.25 },
+      "+150": { cutDensity: 1.70, ep: 0.02 },
+      "150-100": { cutDensity: 1.70, ep: 0.02 },
+      "100-90": { cutDensity: 1.70, ep: 0.02 },
+      "90-60": { cutDensity: 1.70, ep: 0.02 },
+      "60-50": { cutDensity: 1.70, ep: 0.02 },
+      "50-30": { cutDensity: 1.70, ep: 0.02 },
+      "30-25": { cutDensity: 1.70, ep: 0.02 },
+      "25-13": { cutDensity: 1.70, ep: 0.03 },
+      "13-10": { cutDensity: 1.70, ep: 0.03 },
+      "10-8": { cutDensity: 1.70, ep: 0.03 },
+      "8-6": { cutDensity: 1.70, ep: 0.04 },
+      "6-3": { cutDensity: 1.70, ep: 0.04 },
+      "3-2": { cutDensity: 1.70, ep: 100.00 },
+      "2-1.5": { cutDensity: 1.70, ep: 100.00 },
+      "1.5-1": { cutDensity: 1.70, ep: 100.00 },
+      "1-0.5": { cutDensity: 1.70, ep: 100.00 },
+      "0.5-0.25/0.15": { cutDensity: 1.70, ep: 100.00 },
+      "0.25/0.15-0": { cutDensity: 1.70, ep: 100.00 },
     };
 
     function freshSizeData() {
       return defaultSizeData.map((group) => ({
         ...structuredClone(group),
-        ...(defaultSizeSettings[group.size] || { blockDensity: 1.70, blockEp: 0.02, fineDensity: 1.70, fineEp: 0.03 }),
+        ...(defaultSizeSettings[group.size] || { cutDensity: 1.70, ep: 0.02 }),
       }));
     }
 
@@ -295,10 +293,8 @@
     const resultTable = document.getElementById("resultTable");
     const modeSelect = document.getElementById("modeSelect");
     const sizeSelect = document.getElementById("sizeSelect");
-    const blockDensityInput = document.getElementById("blockDensityInput");
-    const blockEpInput = document.getElementById("blockEpInput");
-    const fineDensityInput = document.getElementById("fineDensityInput");
-    const fineEpInput = document.getElementById("fineEpInput");
+    const cutDensityInput = document.getElementById("cutDensityInput");
+    const epInput = document.getElementById("epInput");
 
     function fmt(value, digits = 2) {
       const n = Number(value);
@@ -324,11 +320,8 @@
     }
 
     function activeParams() {
-      const meta = modeMeta[modeSelect.value];
       const group = activeGroup();
-      return meta.family === "block"
-        ? { density: Number(group.blockDensity) || 1.70, ep: Number(group.blockEp) || 0.02 }
-        : { density: Number(group.fineDensity) || 1.70, ep: Number(group.fineEp) || 0.03 };
+      return { density: Number(group.cutDensity) || 1.70, ep: Number(group.ep) || 0.02 };
     }
 
     function productRows() {
@@ -394,10 +387,8 @@
         </tbody>
         <tfoot>
           ${[
-            ["块煤分选密度δ", "blockDensity", 2],
-            ["块煤可能偏差Ep", "blockEp", 3],
-            ["末煤分选密度δ", "fineDensity", 2],
-            ["末煤可能偏差Ep", "fineEp", 3],
+            ["分选密度δ", "cutDensity", 2],
+            ["可能偏差Ep", "ep", 3],
           ].map(([label, field, digits]) => `
             <tr>
               <td class="param-name" colspan="2">${label}</td>
@@ -446,10 +437,8 @@
 
     function syncActiveParamInputs() {
       const group = activeGroup();
-      blockDensityInput.value = fmt(group.blockDensity, 2);
-      blockEpInput.value = fmt(group.blockEp, 3);
-      fineDensityInput.value = fmt(group.fineDensity, 2);
-      fineEpInput.value = fmt(group.fineEp, 3);
+      cutDensityInput.value = fmt(group.cutDensity, 2);
+      epInput.value = fmt(group.ep, 3);
     }
 
     function renderAll() {
@@ -515,13 +504,11 @@
     inputTable.addEventListener("blur", normalizeCell, true);
     modeSelect.addEventListener("change", renderResult);
     sizeSelect.addEventListener("change", renderAll);
-    [blockDensityInput, blockEpInput, fineDensityInput, fineEpInput].forEach((input) => {
+    [cutDensityInput, epInput].forEach((input) => {
       input.addEventListener("input", () => {
         const group = activeGroup();
-        group.blockDensity = Number(blockDensityInput.value) || group.blockDensity;
-        group.blockEp = Number(blockEpInput.value) || group.blockEp;
-        group.fineDensity = Number(fineDensityInput.value) || group.fineDensity;
-        group.fineEp = Number(fineEpInput.value) || group.fineEp;
+        group.cutDensity = Number(cutDensityInput.value) || group.cutDensity;
+        group.ep = Number(epInput.value) || group.ep;
         renderInput();
         renderResult();
       });
