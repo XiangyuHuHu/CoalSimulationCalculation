@@ -223,7 +223,7 @@
     <section class="panel">
       <div class="panel-title">
         <span>块煤浅槽分选</span>
-        <span class="hint">红色列和产品数据可手填；底部自动汇总</span>
+        <span class="hint">Ep 可手填；产品数据复用 test1 粒级输入并按分选密度自动计算</span>
       </div>
       <div class="table-wrap">
         <table id="calcTable" class="calc-table"></table>
@@ -273,6 +273,18 @@
     ];
 
     let rows = structuredClone(defaultRows);
+    let test1SizeData = null;
+
+    const densityRows = [
+      { label: "<1.30", density: 1.20 },
+      { label: "1.30-1.40", density: 1.35 },
+      { label: "1.40-1.50", density: 1.45 },
+      { label: "1.50-1.60", density: 1.55 },
+      { label: "1.60-1.70", density: 1.65 },
+      { label: "1.70-1.80", density: 1.75 },
+      { label: "1.80-2.00", density: 1.90 },
+      { label: ">2.00", density: 2.10 },
+    ];
 
     const expected = {
       cleanYield: 27.7473149779888,
@@ -288,21 +300,84 @@
       return Number.isFinite(n) ? n.toFixed(digits) : "-";
     }
 
-    function sum(field) {
-      return rows.reduce((total, row) => total + (Number(row[field]) || 0), 0);
+    async function loadTest1SizeData() {
+      const response = await fetch("../test1/index.html", { cache: "no-store" });
+      const html = await response.text();
+      const match = html.match(/const defaultSizeData = (\[.*?\]);\n\n    const defaultSizeSettings/s);
+      if (!match) throw new Error("未能读取 test1 默认粒级数据");
+      return JSON.parse(match[1]);
     }
 
-    function weightedAsh(yieldField, ashField) {
-      const y = sum(yieldField);
+    function normsdist(x) {
+      const z = Number(x);
+      if (!Number.isFinite(z)) return 0;
+      const t = 1 / (1 + 0.2316419 * Math.abs(z));
+      const d = 0.3989423 * Math.exp((-z * z) / 2);
+      const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+      return z > 0 ? 1 - p : p;
+    }
+
+    function rejectRate(density, cutDensity, ep) {
+      const epSafe = Math.max(Math.abs(Number(ep) || 0.02), 0.001);
+      return normsdist((0.675 * (Number(density) - Number(cutDensity))) / epSafe);
+    }
+
+    function weightedAshFrom(items) {
+      const y = items.reduce((total, item) => total + item.yield, 0);
       if (y <= 0) return 0;
-      return rows.reduce((total, row) => total + (Number(row[yieldField]) || 0) * (Number(row[ashField]) || 0), 0) / y;
+      return items.reduce((total, item) => total + item.yield * item.ash, 0) / y;
+    }
+
+    function calculateProductRow(row) {
+      const source = test1SizeData?.find((item) => item.size === row.size);
+      if (!source) return { ...row };
+
+      const cutDensity = Number(document.getElementById("densityInput").value) || 1.70;
+      const rawYieldTotal = source.rows.reduce((sum, item) => sum + (Number(item.yield) || 0), 0);
+      const sizeYieldTotal = source.rows.reduce((sum, item) => sum + (Number(item.sizeYield) || 0), 0);
+      const cleanItems = [];
+      const rejectItems = [];
+
+      source.rows.forEach((item, index) => {
+        const effectiveRawYield = sizeYieldTotal > 0
+          ? rawYieldTotal * ((Number(item.sizeYield) || 0) / sizeYieldTotal)
+          : Number(item.yield) || 0;
+        const reject = rejectRate(densityRows[index].density, cutDensity, row.ep);
+        rejectItems.push({ yield: effectiveRawYield * reject, ash: Number(item.ash) || 0 });
+        cleanItems.push({ yield: effectiveRawYield * (1 - reject), ash: Number(item.ash) || 0 });
+      });
+
+      const cleanYield = cleanItems.reduce((sum, item) => sum + item.yield, 0);
+      const rejectYield = rejectItems.reduce((sum, item) => sum + item.yield, 0);
+      return {
+        ...row,
+        cleanYield,
+        cleanAsh: weightedAshFrom(cleanItems),
+        rejectYield,
+        rejectAsh: weightedAshFrom(rejectItems),
+      };
+    }
+
+    function calculatedRows() {
+      return rows.map(calculateProductRow);
+    }
+
+    function sum(calcRows, field) {
+      return calcRows.reduce((total, row) => total + (Number(row[field]) || 0), 0);
+    }
+
+    function weightedAsh(calcRows, yieldField, ashField) {
+      const y = sum(calcRows, yieldField);
+      if (y <= 0) return 0;
+      return calcRows.reduce((total, row) => total + (Number(row[yieldField]) || 0) * (Number(row[ashField]) || 0), 0) / y;
     }
 
     function calculate() {
-      const cleanYield = sum("cleanYield");
-      const cleanAsh = weightedAsh("cleanYield", "cleanAsh");
-      const rejectYield = sum("rejectYield");
-      const rejectAsh = weightedAsh("rejectYield", "rejectAsh");
+      const calcRows = calculatedRows();
+      const cleanYield = sum(calcRows, "cleanYield");
+      const cleanAsh = weightedAsh(calcRows, "cleanYield", "cleanAsh");
+      const rejectYield = sum(calcRows, "rejectYield");
+      const rejectAsh = weightedAsh(calcRows, "rejectYield", "rejectAsh");
       const totalYield = cleanYield + rejectYield;
       const totalAsh = totalYield > 0
         ? (cleanYield * cleanAsh + rejectYield * rejectAsh) / totalYield
@@ -312,6 +387,7 @@
 
     function renderTable() {
       const calc = calculate();
+      const calcRows = calculatedRows();
       document.getElementById("calcTable").innerHTML = `
         <thead>
           <tr class="title-row"><th colspan="5">块煤浅槽分选</th></tr>
@@ -335,13 +411,13 @@
           </tr>
         </thead>
         <tbody>
-          ${rows.map((row, index) => `
+          ${calcRows.map((row, index) => `
             <tr>
               <td class="editable ep-cell" contenteditable="true" data-index="${index}" data-field="ep">${fmt(row.ep, 2)}</td>
-              <td class="editable" contenteditable="true" data-index="${index}" data-field="cleanYield">${fmt(row.cleanYield, 2)}</td>
-              <td class="editable" contenteditable="true" data-index="${index}" data-field="cleanAsh">${fmt(row.cleanAsh, 2)}</td>
-              <td class="editable" contenteditable="true" data-index="${index}" data-field="rejectYield">${fmt(row.rejectYield, 2)}</td>
-              <td class="editable" contenteditable="true" data-index="${index}" data-field="rejectAsh">${fmt(row.rejectAsh, 2)}</td>
+              <td>${fmt(row.cleanYield, 2)}</td>
+              <td>${fmt(row.cleanAsh, 2)}</td>
+              <td>${fmt(row.rejectYield, 2)}</td>
+              <td>${fmt(row.rejectAsh, 2)}</td>
             </tr>
           `).join("")}
           <tr class="sum-row">
@@ -405,6 +481,7 @@
       if (!cell) return;
       const index = Number(cell.dataset.index);
       const field = cell.dataset.field;
+      if (field !== "ep") return;
       const value = Number(String(cell.textContent).trim());
       if (!Number.isFinite(value)) return;
       rows[index][field] = value;
@@ -416,6 +493,7 @@
       if (!cell) return;
       const index = Number(cell.dataset.index);
       const field = cell.dataset.field;
+      if (field !== "ep") return;
       const value = Number(String(cell.textContent).trim());
       if (Number.isFinite(value)) rows[index][field] = value;
       cell.textContent = Number.isFinite(value) ? fmt(value, field === "ep" ? 2 : 2) : "";
@@ -429,9 +507,10 @@
 
     function exportCsv() {
       const calc = calculate();
+      const calcRows = calculatedRows();
       const lines = [
         ["粒级", "可能偏差Ep", "块精煤占全样", "块精煤灰分", "块矸石占全样", "块矸石灰分"],
-        ...rows.map((row) => [row.size, row.ep, row.cleanYield, row.cleanAsh, row.rejectYield, row.rejectAsh]),
+        ...calcRows.map((row) => [row.size, row.ep, row.cleanYield, row.cleanAsh, row.rejectYield, row.rejectAsh]),
         ["总计", "", calc.cleanYield, calc.cleanAsh, calc.rejectYield, calc.rejectAsh],
         ["块煤合计", "", "", "", calc.totalYield, calc.totalAsh],
       ];
@@ -461,7 +540,16 @@
     });
     document.getElementById("exportCsvBtn").addEventListener("click", exportCsv);
 
-    render();
+    async function init() {
+      try {
+        test1SizeData = await loadTest1SizeData();
+      } catch (error) {
+        console.warn(error);
+      }
+      render();
+    }
+
+    init();
   </script>
 </body>
 </html>
