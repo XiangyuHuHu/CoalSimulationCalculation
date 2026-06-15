@@ -141,7 +141,7 @@
     .input-table th:nth-child(2),
     .input-table td:nth-child(2) { width: 76px; }
     .input-table .size-head { background: var(--head); }
-    .input-table .param-name { background: #f8fafc; color: var(--muted); font-weight: 700; }
+    .input-table .param-name { background: var(--yellow); color: var(--text); font-weight: 700; }
     .input-table .param-value { background: #fffef0; color: var(--red); font-weight: 700; cursor: text; }
     .input-table td[contenteditable="true"] { cursor: text; }
     .input-table td[contenteditable="true"]:focus,
@@ -376,19 +376,6 @@
           </tr>
         </thead>
         <tbody>
-          ${[
-            ["块煤δ", "blockDensity", 2],
-            ["块煤Ep", "blockEp", 3],
-            ["末煤δ", "fineDensity", 2],
-            ["末煤Ep", "fineEp", 3],
-          ].map(([label, field, digits]) => `
-            <tr>
-              <td class="param-name" colspan="2">${label}</td>
-              ${sizeData.map((group, groupIndex) => `
-                <td class="param-value" contenteditable="true" colspan="2" data-param-group="${groupIndex}" data-param-field="${field}" data-param-digits="${digits}">${fmt(group[field], digits)}</td>
-              `).join("")}
-            </tr>
-          `).join("")}
           ${densityRows.map((density, index) => {
             return `
               <tr>
@@ -405,6 +392,21 @@
             `;
           }).join("")}
         </tbody>
+        <tfoot>
+          ${[
+            ["块煤分选密度δ", "blockDensity", 2],
+            ["块煤可能偏差Ep", "blockEp", 3],
+            ["末煤分选密度δ", "fineDensity", 2],
+            ["末煤可能偏差Ep", "fineEp", 3],
+          ].map(([label, field, digits]) => `
+            <tr>
+              <td class="param-name" colspan="2">${label}</td>
+              ${sizeData.map((group, groupIndex) => `
+                <td class="param-value" contenteditable="true" colspan="2" data-param-group="${groupIndex}" data-param-field="${field}" data-param-digits="${digits}">${fmt(group[field], digits)}</td>
+              `).join("")}
+            </tr>
+          `).join("")}
+        </tfoot>
       `;
     }
 
