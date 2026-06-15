@@ -215,7 +215,7 @@
     <section class="panel">
       <div class="panel-title">
         <span>输入数据</span>
-        <span class="hint">密度、Ep、灰分、原占全样都可以修改</span>
+        <span class="hint">密度、Ep、灰分、原占全样都可以修改，占本级自动计算</span>
       </div>
       <div class="param-grid">
         <label class="param-card"><span>分选密度 δ</span><input id="cutDensityInput" type="number" step="0.01" value="1.70"></label>
@@ -351,6 +351,10 @@
       return { totalYield, ash };
     }
 
+    function groupRawYieldTotal(group) {
+      return group.rows.reduce((sum, row) => sum + (Number(row.yield) || 0), 0);
+    }
+
     function renderSizeOptions() {
       sizeSelect.innerHTML = sizeData.map((item) => `<option value="${item.size}">${item.size}</option>`).join("");
       sizeSelect.value = "150-100";
@@ -362,10 +366,10 @@
           <tr>
             <th rowspan="2">密度级(kg/l)</th>
             <th rowspan="2">密度</th>
-            ${sizeData.map((group) => `<th class="size-head" colspan="2">${group.size}</th>`).join("")}
+            ${sizeData.map((group) => `<th class="size-head" colspan="3">${group.size}</th>`).join("")}
           </tr>
           <tr>
-            ${sizeData.map(() => `<th>灰分(%)</th><th>原占全样(%)</th>`).join("")}
+            ${sizeData.map(() => `<th>占本级(%)</th><th>灰分(%)</th><th>原占全样(%)</th>`).join("")}
           </tr>
         </thead>
         <tbody>
@@ -376,7 +380,10 @@
                 <td class="density-col">${fmt(density.density, 2)}</td>
                 ${sizeData.map((group, groupIndex) => {
                   const row = group.rows[index] || { ash: 0, yield: 0 };
+                  const groupTotal = groupRawYieldTotal(group);
+                  const sizeYield = groupTotal > 0 ? ((Number(row.yield) || 0) / groupTotal) * 100 : 0;
                   return `
+                    <td>${fmt(sizeYield, 2)}</td>
                     <td contenteditable="true" data-group="${groupIndex}" data-row="${index}" data-field="ash">${fmt(row.ash, 2)}</td>
                     <td contenteditable="true" data-group="${groupIndex}" data-row="${index}" data-field="yield">${fmt(row.yield, 3)}</td>
                   `;
@@ -393,7 +400,7 @@
             <tr>
               <td class="param-name" colspan="2">${label}</td>
               ${sizeData.map((group, groupIndex) => `
-                <td class="param-value" contenteditable="true" colspan="2" data-param-group="${groupIndex}" data-param-field="${field}" data-param-digits="${digits}">${fmt(group[field], digits)}</td>
+                <td class="param-value" contenteditable="true" colspan="3" data-param-group="${groupIndex}" data-param-field="${field}" data-param-digits="${digits}">${fmt(group[field], digits)}</td>
               `).join("")}
             </tr>
           `).join("")}
