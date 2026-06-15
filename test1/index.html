@@ -113,7 +113,7 @@
     th { background: #f8fafc; font-weight: 700; }
     .param-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(130px, 1fr));
+      grid-template-columns: repeat(2, minmax(130px, 1fr));
       gap: 10px;
       padding: 14px;
       border-bottom: 1px solid var(--soft-line);
@@ -135,11 +135,14 @@
       font-size: 20px;
       line-height: 1.1;
     }
-    .input-table { min-width: 2400px; }
+    .input-table { min-width: 760px; }
     .input-table th:first-child,
     .input-table td:first-child { width: 112px; }
     .input-table th:nth-child(2),
     .input-table td:nth-child(2) { width: 76px; }
+    .input-table .size-yield-col { width: 88px; }
+    .input-table .ash-col,
+    .input-table .raw-yield-col { width: 92px; }
     .input-table .size-head { background: var(--head); }
     .input-table .param-name { background: var(--yellow); color: var(--text); font-weight: 700; }
     .input-table .param-value { background: #fffef0; color: var(--red); font-weight: 700; cursor: text; }
@@ -316,7 +319,16 @@
     }
 
     function activeGroup() {
-      return sizeData.find((item) => item.size === sizeSelect.value) || sizeData[0];
+      return sizeData.find((item) => item.size === sizeSelect.value) || sizeData.find((item) => item.size === "150-100") || sizeData[0];
+    }
+
+    function visibleGroups() {
+      if (sizeSelect.value === "__all__") {
+        return sizeData.map((group, index) => ({ group, index }));
+      }
+      const index = sizeData.findIndex((item) => item.size === sizeSelect.value);
+      const safeIndex = index >= 0 ? index : 0;
+      return [{ group: sizeData[safeIndex], index: safeIndex }];
     }
 
     function activeParams() {
@@ -356,20 +368,31 @@
     }
 
     function renderSizeOptions() {
-      sizeSelect.innerHTML = sizeData.map((item) => `<option value="${item.size}">${item.size}</option>`).join("");
+      sizeSelect.innerHTML = `<option value="__all__">显示所有</option>` + sizeData.map((item) => `<option value="${item.size}">${item.size}</option>`).join("");
       sizeSelect.value = "150-100";
     }
 
     function renderInput() {
+      const groups = visibleGroups();
+      inputTable.style.minWidth = `${Math.max(760, 188 + groups.length * 300)}px`;
       inputTable.innerHTML = `
+        <colgroup>
+          <col style="width: 112px">
+          <col style="width: 76px">
+          ${groups.map(() => `
+            <col class="size-yield-col">
+            <col class="ash-col">
+            <col class="raw-yield-col">
+          `).join("")}
+        </colgroup>
         <thead>
           <tr>
             <th rowspan="2">密度级(kg/l)</th>
             <th rowspan="2">密度</th>
-            ${sizeData.map((group) => `<th class="size-head" colspan="3">${group.size}</th>`).join("")}
+            ${groups.map(({ group }) => `<th class="size-head" colspan="3">${group.size}</th>`).join("")}
           </tr>
           <tr>
-            ${sizeData.map(() => `<th>占本级(%)</th><th>灰分(%)</th><th>原占全样(%)</th>`).join("")}
+            ${groups.map(() => `<th>占本级(%)</th><th>灰分(%)</th><th>原占全样(%)</th>`).join("")}
           </tr>
         </thead>
         <tbody>
@@ -378,7 +401,7 @@
               <tr>
                 <td class="density-col">${density.label}</td>
                 <td class="density-col">${fmt(density.density, 2)}</td>
-                ${sizeData.map((group, groupIndex) => {
+                ${groups.map(({ group, index: groupIndex }) => {
                   const row = group.rows[index] || { ash: 0, yield: 0 };
                   const groupTotal = groupRawYieldTotal(group);
                   const sizeYield = groupTotal > 0 ? ((Number(row.yield) || 0) / groupTotal) * 100 : 0;
@@ -399,7 +422,7 @@
           ].map(([label, field, digits]) => `
             <tr>
               <td class="param-name" colspan="2">${label}</td>
-              ${sizeData.map((group, groupIndex) => `
+              ${groups.map(({ group, index: groupIndex }) => `
                 <td class="param-value" contenteditable="true" colspan="3" data-param-group="${groupIndex}" data-param-field="${field}" data-param-digits="${digits}">${fmt(group[field], digits)}</td>
               `).join("")}
             </tr>
