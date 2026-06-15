@@ -111,30 +111,6 @@
       white-space: nowrap;
     }
     th { background: #f8fafc; font-weight: 700; }
-    .param-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(130px, 1fr));
-      gap: 10px;
-      padding: 14px;
-      border-bottom: 1px solid var(--soft-line);
-    }
-    .param-card {
-      border: 1px solid var(--soft-line);
-      border-radius: 8px;
-      padding: 10px 12px;
-      background: #fbfdff;
-    }
-    .param-card span {
-      display: block;
-      margin-bottom: 6px;
-      color: var(--muted);
-      font-size: 12px;
-    }
-    .param-card strong {
-      display: block;
-      font-size: 20px;
-      line-height: 1.1;
-    }
     .input-table { min-width: 760px; }
     .input-table th:first-child,
     .input-table td:first-child { width: 112px; }
@@ -185,7 +161,6 @@
       header { align-items: flex-start; flex-direction: column; }
       main { grid-template-columns: 1fr; }
       .tools { justify-content: flex-start; }
-      .param-grid { grid-template-columns: repeat(2, 1fr); }
     }
   </style>
 </head>
@@ -219,10 +194,6 @@
       <div class="panel-title">
         <span>输入数据</span>
         <span class="hint">密度、Ep、灰分、原占全样都可以修改，占本级自动计算</span>
-      </div>
-      <div class="param-grid">
-        <label class="param-card"><span>分选密度 δ</span><input id="cutDensityInput" type="number" step="0.01" value="1.70"></label>
-        <label class="param-card"><span>可能偏差 Ep</span><input id="epInput" type="number" step="0.001" value="0.020"></label>
       </div>
       <div class="table-wrap">
         <table id="inputTable" class="input-table"></table>
@@ -296,8 +267,6 @@
     const resultTable = document.getElementById("resultTable");
     const modeSelect = document.getElementById("modeSelect");
     const sizeSelect = document.getElementById("sizeSelect");
-    const cutDensityInput = document.getElementById("cutDensityInput");
-    const epInput = document.getElementById("epInput");
 
     function fmt(value, digits = 2) {
       const n = Number(value);
@@ -464,14 +433,7 @@
       `;
     }
 
-    function syncActiveParamInputs() {
-      const group = activeGroup();
-      cutDensityInput.value = fmt(group.cutDensity, 2);
-      epInput.value = fmt(group.ep, 3);
-    }
-
     function renderAll() {
-      syncActiveParamInputs();
       renderInput();
       renderResult();
     }
@@ -491,7 +453,6 @@
         const value = Number(String(paramCell.textContent).trim());
         if (!Number.isFinite(value)) return;
         sizeData[groupIndex][field] = value;
-        if (sizeData[groupIndex].size === sizeSelect.value) syncActiveParamInputs();
         renderResult();
         return;
       }
@@ -514,7 +475,6 @@
         const value = Number(String(paramCell.textContent).trim());
         if (Number.isFinite(value)) sizeData[groupIndex][field] = value;
         paramCell.textContent = Number.isFinite(value) ? fmt(value, digits) : "";
-        if (sizeData[groupIndex].size === sizeSelect.value) syncActiveParamInputs();
         renderResult();
         return;
       }
@@ -544,15 +504,6 @@
     inputTable.addEventListener("blur", normalizeCell, true);
     modeSelect.addEventListener("change", renderResult);
     sizeSelect.addEventListener("change", renderAll);
-    [cutDensityInput, epInput].forEach((input) => {
-      input.addEventListener("input", () => {
-        const group = activeGroup();
-        group.cutDensity = Number(cutDensityInput.value) || group.cutDensity;
-        group.ep = Number(epInput.value) || group.ep;
-        renderInput();
-        renderResult();
-      });
-    });
     document.getElementById("resetBtn").addEventListener("click", resetPage);
   </script>
 </body>
