@@ -193,7 +193,7 @@
     <section class="panel">
       <div class="panel-title">
         <span>输入数据</span>
-        <span class="hint">密度、Ep、灰分、原占全样都可以修改，占本级自动计算</span>
+        <span class="hint">密度、Ep、占本级、灰分、原占全样都可以修改</span>
       </div>
       <div class="table-wrap">
         <table id="inputTable" class="input-table"></table>
@@ -415,12 +415,12 @@
             <tr>
               <td>${row.label}</td>
               <td>${fmt(row.density, 2)}</td>
-              <td class="rate-col">${fmt(row.rate * 100, 0)}%</td>
+              <td class="rate-col">${fmt(row.rate * 100, 2)}%</td>
               <td>${fmt(row.ash, 2)}</td>
-              <td>${fmt(row.productYield, 2)}</td>
+              <td>${fmt(row.productYield, 3)}</td>
             </tr>
           `).join("")}
-          <tr class="sum-row"><td>合计</td><td></td><td></td><td>${fmt(total.ash, 2)}</td><td class="sum-yield">${fmt(total.totalYield, 2)}</td></tr>
+          <tr class="sum-row"><td>合计</td><td></td><td></td><td>${fmt(total.ash, 2)}</td><td class="sum-yield">${fmt(total.totalYield, 3)}</td></tr>
         </tbody>
       `;
       document.getElementById("activeHint").textContent = `${meta.title} · δ=${fmt(params.density, 2)} · Ep=${fmt(params.ep, 3)}`;
